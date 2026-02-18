@@ -1,0 +1,206 @@
+---
+title: "Feature Flags"
+description: "Control which features are available to each client using feature flags"
+icon: "flag"
+---
+
+Feature flags let you turn features on or off for individual clients without deploying new code. Roll out a new feature to one client, test it, then enable it for everyone else when you're ready.
+
+## How it works
+
+The system has two layers:
+
+1. **Features** are a global registry of everything that can be toggled (e.g., `high_cpa_alerts`, `creative_reporting`). Each feature has a unique key, a description, and a global active/inactive switch.
+2. **Feature Flags** are per-client settings that control whether a specific feature is enabled for a given client.
+
+When a user logs in, their client's feature flags get bundled into the JWT token. The Angular app reads them from the token and uses them to show or hide parts of the UI.
+
+<Info>
+  Changes to feature flags take effect the next time a user logs in.
+</Info>
+
+## Managing features and flags
+
+Feature flags are managed through the **Administration > Feature Flags** page. Only super admins can access this page.
+
+The page has two tabs: **Features** (the global registry) and **Feature Flags** (per-client toggles).
+
+### Creating a feature
+
+Before you can toggle anything for a client, you need to register the feature.
+
+<Steps>
+<Step title="Go to Administration > Feature Flags">
+  Navigate to the Feature Flags page under Administration in the sidebar.
+</Step>
+
+<Step title="Open the Features tab">
+  Click the **Features** tab to see the global feature registry.
+</Step>
+
+<Step title="Click Create Feature">
+  Click the **Create Feature** button and fill in the form:
+
+  - **Key** is a unique identifier used in code to check the flag (e.g., `high_cpa_alerts`). This is what developers reference in `isEnabled('high_cpa_alerts')`, so keep it lowercase with underscores.
+  - **Description** is a plain-English explanation of what the feature does. This is for your team's reference so anyone can understand what the flag controls.
+  - **Active** is a global kill switch. Setting it to **false** disables the feature for every client, regardless of their individual flags. Setting it to **true** doesn't turn the feature on for anyone by itself. It just means clients who have a feature flag for it will get access. Think of it as the master on/off for the feature.
+
+  Click **Save**.
+</Step>
+</Steps>
+
+### Enabling a feature for a client
+
+Once a feature exists, you can enable it for specific clients.
+
+<Steps>
+<Step title="Open the Feature Flags tab">
+  Switch to the **Feature Flags** tab.
+</Step>
+
+<Step title="Click Create Flag">
+  Click the **Create Flag** button and fill in the form:
+
+  - **Client** is the client you want to enable or disable the feature for.
+  - **Feature** is the feature you're toggling.
+  - **Enabled** when set to **true**, the client gets access to the feature (as long as the feature's global Active switch is also on). When set to **false**, the feature is explicitly off for this client even though a flag exists.
+
+  Click **Save**.
+</Step>
+</Steps>
+
+You can filter by client to see all flags assigned to a particular client.
+
+## Using feature flags in Angular
+
+### The FeatureFlagService
+
+The `FeatureFlagService` reads flags from the authenticated user's JWT. It's provided at the root level, so you can inject it anywhere.
+
+```typescript
+import { FeatureFlagService } from '@shared/services/feature-flag.service';
+```
+
+It exposes two things:
+
+- `isEnabled(flag: string)` returns `true` if the flag is on for the current client
+- `flags` returns the full `{ [key: string]: boolean }` dictionary
+
+### Toggling a feature in a component
+
+Say you want to show high CPA alerts on the Executive Summary only for clients who have it enabled. Inject the service and expose a getter:
+
+```typescript
+// executive-summary.component.ts
+import { FeatureFlagService } from '@shared/services/feature-flag.service';
+
+@Component({ ... })
+export class ExecutiveSummaryComponent {
+
+  constructor(private featureFlagService: FeatureFlagService) {}
+
+  get showHighCpaAlerts(): boolean {
+    return this.featureFlagService.isEnabled('high_cpa_alerts');
+  }
+}
+```
+
+Then conditionally render the section in the template:
+
+```html
+<!-- executive-summary.component.html -->
+<section *ngIf="showHighCpaAlerts" class="cpa-alerts">
+  <h3>High CPA Alerts</h3>
+  <app-cpa-alert-table [data]="cpaAlerts"></app-cpa-alert-table>
+</section>
+```
+
+### Gating an entire page
+
+If you want to restrict access to an entire page like Creative Reporting, check the flag early and show a fallback:
+
+```typescript
+// creative-reporting.component.ts
+export class CreativeReportingComponent implements OnInit {
+
+  hasAccess = false;
+
+  constructor(private featureFlagService: FeatureFlagService) {}
+
+  ngOnInit(): void {
+    this.hasAccess = this.featureFlagService.isEnabled('creative_reporting');
+  }
+}
+```
+
+```html
+<!-- creative-reporting.component.html -->
+<div *ngIf="hasAccess; else noAccess">
+  <!-- full report content -->
+</div>
+
+<ng-template #noAccess>
+  <p>Creative Reporting is not enabled for your account. Contact your admin.</p>
+</ng-template>
+```
+
+### Checking multiple flags
+
+If a component depends on several flags, grab the full dictionary:
+
+```typescript
+const flags = this.featureFlagService.flags;
+// { "high_cpa_alerts": true, "creative_reporting": false, ... }
+```
+
+## API endpoints
+
+All endpoints require super admin permissions.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/feature_flags/features/` | List all features |
+| `POST` | `/api/feature_flags/features/` | Create a new feature |
+| `GET` | `/api/feature_flags/features/:id/` | Get a single feature |
+| `PUT` | `/api/feature_flags/features/:id/` | Update a feature |
+| `DELETE` | `/api/feature_flags/features/:id/` | Delete a feature |
+| `GET` | `/api/feature_flags/` | List all flags (supports `?client_id=` filter) |
+| `POST` | `/api/feature_flags/` | Create a new flag |
+| `GET` | `/api/feature_flags/:id/` | Get a single flag |
+| `PUT` | `/api/feature_flags/:id/` | Update a flag |
+| `DELETE` | `/api/feature_flags/:id/` | Delete a flag |
+
+## Backend data model
+
+### Feature
+
+The global registry of toggleable features.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `key` | `CharField(100)` | Unique identifier (e.g., `high_cpa_alerts`) |
+| `description` | `TextField` | What this feature does |
+| `is_active` | `BooleanField` | Global kill switch. If `false`, the feature is off for everyone regardless of per-client flags. |
+
+### FeatureFlag
+
+Per-client enablement of a feature.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `client_id` | `CharField(100)` | The client this flag applies to |
+| `feature` | `ForeignKey(Feature)` | The feature being toggled |
+| `enabled` | `BooleanField` | Whether this feature is on for this client |
+| `created_at` | `DateTimeField` | When the flag was created |
+| `updated_at` | `DateTimeField` | When the flag was last modified |
+
+<Note>
+  Each client can only have one flag per feature. The combination of `client_id` and `feature` is unique.
+</Note>
+
+## Good to know
+
+- **Super admin only.** Only super admins can create, edit, or delete features and flags. The Feature Flags page is hidden from the sidebar for regular users.
+- **Changes aren't instant.** Flags live in the JWT, so users need to log out and back in to pick up changes. Plan accordingly when rolling out time-sensitive features.
+- **Global kill switch.** Setting a feature's `is_active` to `false` disables it for all clients, even if they have an `enabled` flag. Useful for emergency rollbacks.
+- **No default flags.** New clients don't get any flags automatically. You need to explicitly create a flag for each client/feature combination.
