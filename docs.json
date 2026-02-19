@@ -1,13 +1,13 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Mission Control",
   "colors": {
     "primary": "#5856CF",
     "light": "#8483d0",
     "dark": "#2a2972"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/images/Frame1(1).png",
   "navigation": {
     "tabs": [
       {
