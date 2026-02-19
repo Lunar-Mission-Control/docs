@@ -10,7 +10,7 @@ Feature flags let you turn features on or off for individual clients without dep
 
 The system has two layers:
 
-1. **Features** are a global registry of everything that can be toggled (e.g., `high_cpa_alerts`, `creative_reporting`). Each feature has a unique key, a description, and a global active/inactive switch.
+1. **Features** are a global registry of everything that can be toggled (e.g., `hide_creative_report_dropdown`). Each feature has a unique key, a description, and a global active/inactive switch.
 2. **Feature Flags** are per-client settings that control whether a specific feature is enabled for a given client.
 
 When a user logs in, their client's feature flags get bundled into the JWT token. The Angular app reads them from the token and uses them to show or hide parts of the UI.
@@ -41,7 +41,7 @@ Before you can toggle anything for a client, you need to register the feature.
 <Step title="Click Create Feature">
   Click the **Create Feature** button and fill in the form:
 
-  - **Key** is a unique identifier used in code to check the flag (e.g., `high_cpa_alerts`). This is what developers reference in `isEnabled('high_cpa_alerts')`, so keep it lowercase with underscores.
+  - **Key** is a unique identifier used in code to check the flag (e.g., `hide_creative_report_dropdown`). This is what developers reference in `isEnabled('hide_creative_report_dropdown')`, so keep it lowercase with underscores.
   - **Description** is a plain-English explanation of what the feature does. This is for your team's reference so anyone can understand what the flag controls.
   - **Active** is a global kill switch. Setting it to **false** disables the feature for every client, regardless of their individual flags. Setting it to **true** doesn't turn the feature on for anyone by itself. It just means clients who have a feature flag for it will get access. Think of it as the master on/off for the feature.
 
@@ -88,60 +88,30 @@ It exposes two things:
 
 ### Toggling a feature in a component
 
-Say you want to show high CPA alerts on the Executive Summary only for clients who have it enabled. Inject the service and expose a getter:
+Say you want to hide the Creative Report dropdown for certain clients. Inject the service and expose a getter:
 
 ```typescript
-// executive-summary.component.ts
+// channel-performance.component.ts
 import { FeatureFlagService } from '@shared/services/feature-flag.service';
 
 @Component({ ... })
-export class ExecutiveSummaryComponent {
+export class ChannelPerformanceComponent {
 
   constructor(private featureFlagService: FeatureFlagService) {}
 
-  get showHighCpaAlerts(): boolean {
-    return this.featureFlagService.isEnabled('high_cpa_alerts');
+  get showCreativeReportDropdown(): boolean {
+    return !this.featureFlagService.isEnabled('hide_creative_report_dropdown');
   }
 }
 ```
 
-Then conditionally render the section in the template:
+Then conditionally render the element in the template:
 
 ```html
-<!-- executive-summary.component.html -->
-<section *ngIf="showHighCpaAlerts" class="cpa-alerts">
-  <h3>High CPA Alerts</h3>
-  <app-cpa-alert-table [data]="cpaAlerts"></app-cpa-alert-table>
-</section>
-```
-
-### Gating an entire page
-
-If you want to restrict access to an entire page like Creative Reporting, check the flag early and show a fallback:
-
-```typescript
-// creative-reporting.component.ts
-export class CreativeReportingComponent implements OnInit {
-
-  hasAccess = false;
-
-  constructor(private featureFlagService: FeatureFlagService) {}
-
-  ngOnInit(): void {
-    this.hasAccess = this.featureFlagService.isEnabled('creative_reporting');
-  }
-}
-```
-
-```html
-<!-- creative-reporting.component.html -->
-<div *ngIf="hasAccess; else noAccess">
-  <!-- full report content -->
-</div>
-
-<ng-template #noAccess>
-  <p>Creative Reporting is not enabled for your account. Contact your admin.</p>
-</ng-template>
+<!-- channel-performance.component.html -->
+<mat-select *ngIf="showCreativeReportDropdown">
+  <!-- creative report options -->
+</mat-select>
 ```
 
 ### Checking multiple flags
@@ -150,7 +120,7 @@ If a component depends on several flags, grab the full dictionary:
 
 ```typescript
 const flags = this.featureFlagService.flags;
-// { "high_cpa_alerts": true, "creative_reporting": false, ... }
+// { "hide_creative_report_dropdown": true, ... }
 ```
 
 ## API endpoints
@@ -178,7 +148,7 @@ The global registry of toggleable features.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `key` | `CharField(100)` | Unique identifier (e.g., `high_cpa_alerts`) |
+| `key` | `CharField(100)` | Unique identifier (e.g., `hide_creative_report_dropdown`) |
 | `description` | `TextField` | What this feature does |
 | `is_active` | `BooleanField` | Global kill switch. If `false`, the feature is off for everyone regardless of per-client flags. |
 
