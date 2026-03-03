@@ -89,9 +89,16 @@
       },
       {
         "tab": "Temp",
-        "pages": [
-          "click",
-          "revenue-reporting"
+        "groups": [
+          {
+            "group": "Attribution Reporting",
+            "pages": [
+              "click",
+              "current-process",
+              "revenue-reporting-issues",
+              "revenue-reporting"
+            ]
+          }
         ]
       }
     ]

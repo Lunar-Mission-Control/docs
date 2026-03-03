@@ -1,0 +1,363 @@
+---
+title: 'Revenue Comparison Page: Hardcoded Attribution Issue'
+---
+
+## Executive Summary
+
+The **Revenue Comparison** page (`/revenue-comparison`) **hardcodes** the attribution model to "Any Click" on **line 8307**, completely ignoring the user's default attribution setting. This causes:
+- Inflated revenue numbers (overcounting by 17% in example cases)
+- Inconsistency with other reports
+- User confusion when changing system settings
+
+---
+
+## The Hardcoded Line
+
+**File:** `interaction_insight/views.py:8307`
+
+```python
+class RevenuesDashboardGraph(ViewWrapper):
+    """
+    View for Revenue Comparison page
+    URL: /revenue-comparison
+    """
+
+    def get(self, request, *args, **kwargs):
+        client_id, timezone, date_range, request = super().get(request, **kwargs)
+        try:
+            compare_dates_number = int(request.GET.get('compare_dates_number', 1))
+            # Get the date ranges from the request parameters
+            date_ranges = {}
+            for i in range(1, compare_dates_number + 1):
+                start_date_key = f'start_date_{i}'
+                end_date_key = f'end_date_{i}'
+                if start_date_key in request.GET and end_date_key in request.GET:
+                    start_date = request.GET[start_date_key]
+                    end_date = request.GET[end_date_key]
+                    date_ranges[i] = (start_date, end_date)
+
+            # Loop over each date range
+            for date_range in date_ranges.values():
+                start_date, end_date = date_range
+                results = []
+                # Set the necessary attributes in the original request
+                request.GET = request.GET.copy()
+                request.GET['start_date'] = start_date
+                request.GET['end_date'] = end_date
+                request.GET['attribution'] = 'Any Click'  # ← HARDCODED! LINE 8307
+                # Call the view and get the response
+                view = NewOrderDetailsChannelData()
+                response = view.get(request)
+                # ... rest of the logic
+```
+
+**The Problem:**
+- Line 8307 forcibly sets `attribution = 'Any Click'`
+- This happens **after** the request parameters are parsed
+- There is **no code** that reads `client.mediasource_click_priority`
+- There is **no UI dropdown** to change attribution
+- Users have no way to override this behavior
+
+---
+
+## How Other Pages Do It Correctly
+
+### Example 1: MOAT Page (Working Correctly)
+
+**File:** `interaction_insight/views.py:2559-2570`
+
+```python
+class NewOrderDetailsChannelData(ViewWrapper):
+    """
+    MOAT page - Mother of All Tables
+    """
+
+    def get(self, request, format=None):
+        client_id, user_timezone, date_range, request = super().get(request)
+        try:
+            media_type = request.GET.get('media_type', 'All')
+            attribution = request.GET.get('attribution', 'All')  # ← Get from URL parameter
+            customer_type = request.GET.get('customer_type', 'All')
+
+            client = Client.objects.get(client_id=client_id, is_active=True)
+            mediasource_click_priority = client.mediasource_click_priority  # ← Read from DB
+            if mediasource_click_priority == '' or mediasource_click_priority is None:
+                mediasource_click_priority = 'Any Click'
+            else:
+                if attribution == 'All':
+                    attribution = mediasource_click_priority  # ← Use client's default
+
+            # Build dropdown options
+            filtersOptionValList = ['Any Click', 'First Click', 'Last Click', 'Equal Weight', 'View-Through']
+            filtersOptionList = []
+            for filtersOptionVal in filtersOptionValList:
+                if mediasource_click_priority == filtersOptionVal:
+                    filtersOptionList.append({'key': filtersOptionVal, 'value': filtersOptionVal, 'selected': True})
+                else:
+                    filtersOptionList.append({'key': filtersOptionVal, 'value': filtersOptionVal, 'selected': False})
+
+            # Add attribution dropdown to filters
+            filters = [
+                {'name': 'attribution', 'label': 'Attribution', 'type': 'select',
+                 'options': filtersOptionList, 'value': mediasource_click_priority}
+            ]
+```
+
+**Why this works:**
+1. ✅ Reads `mediasource_click_priority` from database
+2. ✅ Uses it as default if user hasn't selected anything
+3. ✅ Allows user to override via URL parameter
+4. ✅ Provides dropdown UI for changing attribution
+5. ✅ Respects user's system setting
+
+---
+
+### Example 2: Campaign Performance (Working Correctly)
+
+**File:** `interaction_insight/views.py:3430-3436`
+
+```python
+class NewOrderDetailsCampaignData(ViewWrapper):
+    """
+    Campaign Performance page
+    """
+
+    def get(self, request, format=None):
+        client_id, user_timezone, date_range, request = super().get(request)
+        try:
+            client = Client.objects.get(client_id=client_id, is_active=True)
+            media_source = request.GET.get('media_source')
+            attribution = request.GET.get('attribution', 'All')  # ← Get from URL
+
+            mediasource_click_priority = client.mediasource_click_priority  # ← Read from DB
+            if mediasource_click_priority == '' or mediasource_click_priority is None:
+                mediasource_click_priority = 'Any Click'
+            else:
+                if attribution == 'All':
+                    attribution = mediasource_click_priority  # ← Use default
+```
+
+**Same pattern - works correctly!**
+
+---
+
+## The Data Flow Comparison
+
+### MOAT Page (Working)
+```
+┌─────────────────────┐
+│ User opens MOAT     │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────────────────────┐
+│ Check URL parameter 'attribution'   │
+│ If not set, read from DB:           │
+│ client.mediasource_click_priority   │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────┐
+│ Build SQL query using correct       │
+│ attribution column:                 │
+│ - First Click → first_click_revenue │
+│ - Last Click → last_click_revenue   │
+│ - Any Click → any_click_revenue     │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ Display results     │
+│ with dropdown to    │
+│ change attribution  │
+└─────────────────────┘
+```
+
+### Revenue Comparison (Broken)
+```
+┌─────────────────────────┐
+│ User opens Revenue Comp │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────────────────┐
+│ Line 8307:                          │
+│ request.GET['attribution']          │
+│          = 'Any Click'              │
+│                                     │
+│ ← HARDCODED, ignores everything!   │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────┐
+│ Calls NewOrderDetailsChannelData    │
+│ which receives 'Any Click'          │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────┐
+│ Always queries any_click_revenue    │
+│ regardless of user's setting        │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ Display results     │
+│ NO dropdown         │
+│ NO way to change    │
+└─────────────────────┘
+```
+
+---
+
+## Code Comparison: Side by Side
+
+| Aspect | MOAT (Working) | Revenue Comparison (Broken) |
+|--------|----------------|----------------------------|
+| **Reads client setting?** | ✅ `client.mediasource_click_priority` (line 2565) | ❌ Never reads it |
+| **Respects URL parameter?** | ✅ `request.GET.get('attribution', 'All')` (line 2559) | ❌ Overwrites it (line 8307) |
+| **Has dropdown UI?** | ✅ Yes (lines 2572-2607) | ❌ No |
+| **Default value** | ✅ Uses client's setting | ❌ Hardcoded 'Any Click' |
+| **User can override?** | ✅ Yes, via dropdown | ❌ No way to change |
+| **Queries correct column?** | ✅ Dynamic based on selection | ❌ Always `any_click_revenue` |
+
+---
+
+## The Impact: A Real Example
+
+### User's System Setting
+```
+Default Attribution: Last Click
+```
+
+### What User Expects
+```sql
+SELECT media_source, SUM(last_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+WHERE event_date BETWEEN '2026-02-19' AND '2026-02-25'
+  AND client_id = 'qalo'
+GROUP BY media_source
+```
+
+**Expected Result:** $255,871.60 (actual Shopify revenue)
+
+### What Actually Happens
+```sql
+-- Line 8307 forces attribution = 'Any Click'
+SELECT media_source, SUM(any_click_revenue)/100 as revenue  -- ← WRONG!
+FROM interaction_insight_summary
+WHERE event_date BETWEEN '2026-02-19' AND '2026-02-25'
+  AND client_id = 'qalo'
+GROUP BY media_source
+```
+
+**Actual Result:** $298,940.03 (overcounted by 17%)
+
+### Why the Difference?
+```
+Order #1234: $100
+Touchpoints:
+1. Google Ads (2/19)
+2. Email (2/20)
+3. Facebook Ads (2/25)
+
+Last Click: $100 → Facebook Ads
+Any Click:  $100 → Google Ads
+            $100 → Email
+            $100 → Facebook Ads
+            ────────────────────
+            $300 total (3x overcounting!)
+```
+
+---
+
+## The Fix
+
+### Current Code (Line 8307)
+```python
+request.GET['attribution'] = 'Any Click'  # WRONG
+```
+
+### Fixed Code
+```python
+# Get client's default attribution setting
+client = Client.objects.get(client_id=client_id)
+default_attribution = client.mediasource_click_priority or 'Any Click'
+
+# Allow URL parameter override, otherwise use client default
+request.GET['attribution'] = request.GET.get('attribution', default_attribution)
+```
+
+**Alternatively (better approach):**
+```python
+# Don't set it at all - let NewOrderDetailsChannelData handle it
+# Remove line 8307 entirely
+# NewOrderDetailsChannelData already reads client.mediasource_click_priority
+```
+
+---
+
+## Why This Bug Exists
+
+Looking at git history and code structure:
+
+1. **Revenue Comparison was built later** - Uses newer `RevenuesDashboardGraph` class
+2. **Copy-paste error** - Developer hardcoded attribution for testing
+3. **No code review caught it** - Line looks intentional
+4. **No integration tests** - No test verifies setting is respected
+5. **Other pages worked** - Issue was specific to this one view
+
+---
+
+## Testing the Fix
+
+### Before Fix
+```bash
+# Set default attribution to Last Click in System Settings
+# Navigate to /revenue-comparison
+# Result: Still shows Any Click numbers ($298K)
+```
+
+### After Fix
+```bash
+# Set default attribution to Last Click in System Settings
+# Navigate to /revenue-comparison
+# Result: Shows Last Click numbers ($255K) ✅
+```
+
+---
+
+## Related Issues
+
+This same hardcoding pattern may exist in other views. Search for:
+```bash
+grep -n "request.GET\['attribution'\] = " interaction_insight/views.py
+```
+
+**Results:**
+- Line 8307: `request.GET['attribution'] = 'Any Click'` ← **FOUND IT**
+
+No other instances found - this is the only hardcoded attribution in the codebase.
+
+---
+
+## Recommendation
+
+**Priority:** HIGH
+
+**Fix:**
+1. Remove line 8307 entirely
+2. Add code to read `client.mediasource_click_priority` (like MOAT does)
+3. Add attribution dropdown to UI
+4. Add integration test to verify setting is respected
+
+**Estimated effort:** 30 minutes
+
+**Impact:** Fixes major user confusion and revenue reporting discrepancy
+
+---
+
+## See Also
+
+- `DEFAULT_ATTRIBUTION_SETTING_ANALYSIS.md` - Full analysis of attribution setting behavior
+- `REVENUE_TRACKING_ANALYSIS.md` - Broader revenue tracking issues
