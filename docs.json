@@ -28,6 +28,13 @@
         "tab": "Guides",
         "groups": [
           {
+            "group": "Onboarding",
+            "pages": [
+              "integrations",
+              "account-setup"
+            ]
+          },
+          {
             "group": "Mission Control",
             "pages": [
               "mission-control/feature-flags"
