@@ -1,0 +1,248 @@
+---
+title: "System Settings Process (Attribution)"
+icon: "gears"
+---
+
+# Default Attribution Model Setting - How It Works & Why It Fails
+
+## Overview
+
+The **Default Attribution** setting in System Settings is stored in the database but **inconsistently applied** across different views, leading to confusion when users change the setting and don't see data updates.
+
+## How It's Supposed to Work
+
+### 1. Storage Location
+**File:** `useraccount/models.py:70`
+```python
+mediasource_click_priority = models.CharField(max_length=80, null=True, blank=True)
+```
+
+**Default Value:** `'Any Click'` (set in `models.py:99`)
+
+**Display Names:**
+- "Any Click"
+- "First Click"
+- "Last Click"
+- "Equal Weight"
+- "View Through Attribution"
+
+### 2. The Data Is Already Calculated
+
+**This is the key insight:** The `interaction_insight_summary` table contains **ALL four attribution models pre-calculated**:
+
+**File:** `interaction_insight/management/commands/ProcessInsightSummary.py:86-148`
+
+| Column Name | Attribution Model |
+|-------------|-------------------|
+| `any_click_revenue` | Every touchpoint gets 100% credit |
+| `first_click_revenue` | First touchpoint only |
+| `last_click_revenue` | Last touchpoint only |
+| `linear_click_revenue` | Split evenly across touchpoints |
+
+**This means:** Changing the attribution setting does **NOT require reprocessing data**. The system just needs to query a different column.
+
+### 3. How Views Use the Setting
+
+Most views correctly read and apply the setting:
+
+**File:** `interaction_insight/views.py:62-74`
+```python
+mediasource_click_priority = Client.objects.get(client_id=client_id, is_active=True).mediasource_click_priority
+if mediasource_click_priority == 'Any Click':
+    mediasource_priority = 'all'
+elif mediasource_click_priority == 'First Click':
+    mediasource_priority = 'first'
+elif mediasource_click_priority == 'Last Click':
+    mediasource_priority = 'last'
+elif mediasource_click_priority == 'Equal Weight':
+    mediasource_priority = 'equal'
+```
+
+**File:** `interaction_insight/selectors.py:1890-1897` (OrderDetailsSource)
+```python
+if attribution == 'First Click':
+    SelectSubQry = f''' sum(first_click_revenue)/100 as revenue '''
+elif attribution == 'Last Click':
+    SelectSubQry = f''' sum(last_click_revenue)/100 as revenue '''
+elif attribution == 'Equal Weight':
+    SelectSubQry = f''' sum(linear_click_revenue)/100 as revenue '''
+else:  # Any Click
+    SelectSubQry = f''' sum(any_click_revenue)/100 as revenue '''
+```
+
+**Then queries:**
+```sql
+SELECT media_source, {SelectSubQry}
+FROM interaction_insight_summary
+WHERE event_date BETWEEN %s AND %s
+```
+
+## Where It Works Correctly
+
+These views **DO respect** the default attribution setting:
+
+### 1. MOAT (Mother of All Tables)
+**File:** `interaction_insight/views.py:2565-2570`
+- ✅ Reads `mediasource_click_priority` from database
+- ✅ Uses it as default if user hasn't manually selected
+- ✅ Allows user override via dropdown
+
+### 2. Campaign Performance
+**File:** `interaction_insight/views.py:3431-3436`
+- ✅ Reads setting
+- ✅ Applies to queries
+- ✅ User can override
+
+### 3. Ad Performance
+**File:** `interaction_insight/views.py:4099-4104`
+- ✅ Reads setting
+- ✅ Applies to queries
+- ✅ User can override
+
+### 4. Email Reports
+**File:** `customemail/management/commands/selectors.py:27-38`
+- ✅ Reads setting
+- ✅ Dynamically builds SQL with correct column name
+
+## Where It FAILS
+
+### **Revenue Comparison Page (PRIMARY ISSUE)**
+
+**File:** `interaction_insight/views.py:8307`
+```python
+request.GET['attribution'] = 'Any Click'  # ← HARDCODED!
+```
+
+**Impact:**
+- Completely ignores `mediasource_click_priority` setting
+- Always uses "Any Click" attribution
+- User cannot override this behavior
+- Leads to inflated revenue numbers (e.g., $298K vs $255K actual)
+
+**Why this is problematic:**
+1. No dropdown to change attribution
+2. Doesn't respect system setting
+3. Shows overcounted revenue by default
+4. Confuses users comparing to other reports
+
+## Why Changing the Setting Appears to Do Nothing
+
+When you update the attribution setting:
+
+✅ **What DOES happen:**
+- Setting is saved to database immediately
+- MOAT, Campaign Performance, Ad Performance pages use new setting on next load
+- Email reports use new setting
+
+❌ **What DOESN'T happen:**
+- Revenue Comparison page ignores it (hardcoded)
+- No frontend notification of change
+- No automatic page refresh
+- Some cached queries may persist for a short time
+
+## How the Setting SHOULD Work
+
+### Current Implementation (Broken)
+```
+User changes setting → Saved to DB → Revenue Comparison ignores it → User confused
+```
+
+### Correct Implementation
+```
+User changes setting → Saved to DB → All pages respect it → Consistent experience
+```
+
+## Technical Root Cause
+
+**The disconnect:**
+1. **Backend stores setting** (`mediasource_click_priority` in DB)
+2. **Most views read setting** (lines 62-74, 2565-2570, 3431-3436, 4099-4104)
+3. **Revenue Comparison hardcodes value** (line 8307)
+4. **No consistency enforcement** across views
+
+## Proposed Fixes
+
+### Fix 1: Remove Hardcoded Attribution in Revenue Comparison
+
+**File:** `interaction_insight/views.py:8307`
+
+**Current (WRONG):**
+```python
+request.GET['attribution'] = 'Any Click'  # Hardcoded!
+```
+
+**Proposed Fix:**
+```python
+# Get client's default attribution setting
+client = Client.objects.get(client_id=client_id)
+default_attribution = client.mediasource_click_priority or 'Any Click'
+
+# Allow URL parameter override, otherwise use client default
+request.GET['attribution'] = request.GET.get('attribution', default_attribution)
+```
+
+**This would:**
+- Respect user's system setting
+- Still allow URL parameter override
+- Make Revenue Comparison consistent with other pages
+
+### Fix 2: Add Attribution Dropdown to Revenue Comparison
+
+Currently Revenue Comparison has **no UI control** for attribution.
+
+**Add:**
+```python
+# Similar to MOAT page (lines 2572-2607)
+filtersOptionValList = ['Any Click', 'First Click', 'Last Click', 'Equal Weight']
+filtersOptionList = []
+for filtersOptionVal in filtersOptionValList:
+    if default_attribution == filtersOptionVal:
+        filtersOptionList.append({'key': filtersOptionVal, 'value': filtersOptionVal, 'selected': True})
+    else:
+        filtersOptionList.append({'key': filtersOptionVal, 'value': filtersOptionVal, 'selected': False})
+
+filters = [
+    {'name': 'attribution', 'label': 'Attribution', 'type': 'select',
+     'options': filtersOptionList, 'value': default_attribution}
+]
+```
+
+### Fix 3: Add Setting Change Notification
+
+When user updates default attribution in System Settings:
+
+```python
+# File: useraccount/views.py (save handler)
+# After saving the setting:
+messages.success(request, f'Default attribution updated to {attribution}.
+                          Refresh any open reports to see changes.')
+```
+
+## Summary Table
+
+| View / Report | Respects Setting? | Has Dropdown? | Notes |
+|---------------|-------------------|---------------|-------|
+| MOAT | ✅ YES | ✅ YES | Works perfectly |
+| Campaign Performance | ✅ YES | ✅ YES | Works perfectly |
+| Ad Performance | ✅ YES | ✅ YES | Works perfectly |
+| **Revenue Comparison** | ❌ **NO** | ❌ **NO** | **BROKEN - Hardcoded** |
+| Email Reports | ✅ YES | N/A | Works perfectly |
+| Executive Summary | ✅ YES | ❌ NO | Uses setting, no override |
+
+## Conclusion
+
+**Why changing the setting doesn't update data:**
+
+1. ✅ **Data is already calculated** - All attribution models exist in the database
+2. ✅ **Most views work correctly** - They read the setting and query the right column
+3. ❌ **Revenue Comparison is broken** - It hardcodes "Any Click" and ignores the setting
+4. ❌ **No user feedback** - System doesn't indicate which pages respect the setting
+
+**Bottom Line:** The setting infrastructure works, but Revenue Comparison bypasses it entirely. Fix line 8307 and the system will work as intended.
+
+---
+
+## Related Documentation
+
+- See `REVENUE_COMPARISON_HARDCODED_ISSUE.md` for detailed analysis of the Revenue Comparison hardcoded issue
+- See `REVENUE_TRACKING_ANALYSIS.md` for broader revenue tracking issues

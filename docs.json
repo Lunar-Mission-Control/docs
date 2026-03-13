@@ -12,14 +12,9 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "icon": "book-open-cover",
-          "href": "https://mintlify.com/docs"
-        },
-        {
-          "anchor": "Blog",
-          "icon": "newspaper",
-          "href": "https://mintlify.com/blog"
+          "anchor": "API Reference",
+          "icon": "terminal",
+          "href": "/api-reference/introduction"
         }
       ]
     },
@@ -27,6 +22,12 @@
       {
         "tab": "Guides",
         "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "index"
+            ]
+          },
           {
             "group": "Onboarding",
             "pages": [
@@ -36,81 +37,120 @@
             ]
           },
           {
-            "group": "Mission Control",
+            "group": "Platform",
+            "pages": [
+              "layerfive/shopify-custom-pixel",
+              "layerfive/database-design"
+            ]
+          },
+          {
+            "group": "Configuration",
             "pages": [
               "mission-control/feature-flags"
             ]
           },
           {
-            "group": "Mission Control",
+            "group": "Performance Reports",
             "pages": [
-              "mission-control/performance-reports"
+              "mission-control/performance-reports",
+              "mission-control/performance-reports-data-dictionary",
+              "mission-control/performance-reports-creating-reports",
+              "mission-control/performance-reports-example"
             ]
           },
           {
-            "group": "Getting started",
+            "group": "Attribution & Reporting",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "attribution/click-attribution",
+              "attribution/current-process",
+              "attribution/revenue-reporting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Authentication",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/endpoint/get-token",
+              "api-reference/endpoint/refresh-token"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "Temp",
-        "groups": [
+          },
           {
-            "group": "Attribution Reporting",
+            "group": "Public API (v1)",
             "pages": [
-              "click",
-              "current-process",
-              "revenue-reporting-issues",
-              "revenue-reporting"
+              "api-reference/endpoint/v1-api-key",
+              "api-reference/endpoint/v1-event-sessions",
+              "api-reference/endpoint/v1-source-performance",
+              "api-reference/endpoint/v1-media-attribution",
+              "api-reference/endpoint/v1-ad-attribution",
+              "api-reference/endpoint/v1-customer-360",
+              "api-reference/endpoint/v1-channel-attribution",
+              "api-reference/endpoint/v1-id-graph",
+              "api-reference/endpoint/v1-customer-journey",
+              "api-reference/endpoint/v1-known-identity",
+              "api-reference/endpoint/v1-conversion-details"
+            ]
+          },
+          {
+            "group": "Identity Insight",
+            "pages": [
+              "api-reference/endpoint/identity-insight",
+              "api-reference/endpoint/identity-customers-block",
+              "api-reference/endpoint/identity-cac",
+              "api-reference/endpoint/identity-ltv-cohort"
+            ]
+          },
+          {
+            "group": "Customer 360",
+            "pages": [
+              "api-reference/endpoint/customer-360-search",
+              "api-reference/endpoint/customer-360-detail"
+            ]
+          },
+          {
+            "group": "Interaction Insight",
+            "pages": [
+              "api-reference/endpoint/interaction-channel-attribution",
+              "api-reference/endpoint/interaction-order-credit",
+              "api-reference/endpoint/interaction-revenue-comparison"
+            ]
+          },
+          {
+            "group": "Sales & Marketing",
+            "pages": [
+              "api-reference/endpoint/sales-dashboard",
+              "api-reference/endpoint/sales-kpi"
+            ]
+          },
+          {
+            "group": "Feature Flags",
+            "pages": [
+              "api-reference/endpoint/features-list",
+              "api-reference/endpoint/features-create",
+              "api-reference/endpoint/flags-list",
+              "api-reference/endpoint/flags-create"
+            ]
+          },
+          {
+            "group": "User Account",
+            "pages": [
+              "api-reference/endpoint/register-client"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api-reference/endpoint/plan-list",
+              "api-reference/endpoint/create-subscription"
             ]
           }
         ]
@@ -125,13 +165,13 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "href": "mailto:support@lunarmc.ai"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "href": "https://app.lunarmc.ai"
     }
   },
   "contextual": {
@@ -148,11 +188,16 @@
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "linkedin": "https://linkedin.com/company/lunarmc"
     }
   },
+  "api": {
+    "baseUrl": "https://id.lunarmc.ai",
+    "auth": {
+      "method": "bearer"
+    }
+  },
+  "openapi": "api-reference/openapi.json",
   "errors": {
     "404": {
       "redirect": false

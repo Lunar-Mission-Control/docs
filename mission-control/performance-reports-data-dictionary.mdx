@@ -1,0 +1,111 @@
+---
+title: "Report Data Dictionary"
+description: "The central repository for all metrics, dimensions, and formulas"
+icon: "book"
+---
+
+## Overview
+
+The `report_data_dictionary` table is the **single source of truth** for all metrics, dimensions, and formulas used in system-defined and custom reports. Every metric -- whether pulled from a source, calculated via formula, or manually entered -- is registered here.
+
+## Schema
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int (PK) | Unique identifier |
+| `metric` | varchar(100) | Metric name (e.g., `CTR`, `Revenue`) |
+| `source_table` | varchar(100) | DB table the metric is pulled from (null for formula/user metrics) |
+| `source_column` | text | Column name in source table |
+| `column_label` | varchar(100) | Human-readable name for UI display |
+| `description` | text | Explanation of metric purpose |
+| `data_type` | varchar(100) | `number`, `percent`, `currency`, `text`, `date` |
+| `entry_type` | varchar(100) | `System`, `Formula`, `User Data`, `Custom` |
+| `client_id` | varchar(100) | Owning client (`0` = system/global) |
+| `formula` | varchar(255) | Formula using dictionary IDs (e.g., `2/3` for clicks/impressions) |
+| `formula_label` | text | Display label for formula in UI |
+| `level` | varchar(255) | Dimension level: `Campaign`, `AdSet`, `Ads`, `Account`, `Orders` |
+| `planning_id` | int | Links to planning/target data |
+| `variance` | boolean | Supports variance calculation |
+| `is_decimal` | boolean | Treat as decimal for calculations |
+| `is_deleted` | boolean | Soft delete flag |
+| `is_agency` | boolean | Agency-specific metric |
+| `is_dimension` | boolean | True if entry is a dimension |
+| `attribute` | varchar(255) | Which attribute a custom dimension/metric is built on |
+| `agency_id` | int | For agency multi-tenancy |
+| `heatmap_reverse` | boolean | True for "lower is better" metrics (CPA, CPM) |
+| `metric_config` | JSON | Additional config (thresholds, calculation rules, display) |
+
+## Key Columns Explained
+
+### `source_table`
+
+Specifies which database table the metric is pulled from. Only required for **system metrics** -- formula and user metrics leave this null.
+
+| metric | source_table | source_column | level |
+|---|---|---|---|
+| Clicks | interaction_insight_ads_tracker | clicks | Account |
+| Total Sales | orders_new | total_sales | Orders |
+
+<Tip>
+If the metric is formula-only, `source_table` should be null.
+</Tip>
+
+### `source_column`
+
+The exact column in `source_table` to pull values from. For derived metrics like ROAS, you can specify the calculation directly:
+
+| metric | source_table | source_column | level |
+|---|---|---|---|
+| ROAS | interaction_insight_ads_campaigntracker | conv_value / cost | Campaign |
+| Revenue | interaction_insight_ads_campaigntracker | conv_value | Campaign |
+
+<Tip>
+For derived system metrics (ROAS, CPA, CPC, CTR), you can set `source_column` as `conv_value / cost`. Also add the formula field (e.g., `2/3`) for footer calculations.
+</Tip>
+
+### `attribute`
+
+Defines which attribute a custom metric or dimension is built on. This enables grouping and filtering.
+
+| Name | attribute | is_dimension |
+|---|---|---|
+| Facebook Ads Paid Media Revenue (GA) | source | FALSE |
+| Meta Prospecting Campaigns | campaign_name | TRUE |
+
+### `level`
+
+Specifies which data level a metric belongs to. The same metric (e.g., Clicks) exists at multiple levels:
+
+| metric | level | source_table |
+|---|---|---|
+| Clicks | Account | interaction_insight_ads_tracker |
+| Clicks | Campaign | interaction_insight_ads_campaigntracker |
+| Clicks | AdSet | interaction_insight_ads_adsettracker |
+| Clicks | Ads | ads_adtracker |
+
+<Info>
+The UI uses `level` for filtering -- when a user selects a dimension, they see all metrics at that level.
+</Info>
+
+## Report Custom Fields
+
+The `report_custom_fields` table maps metrics and dimensions to their associated sources.
+
+- A system metric is always associated with **one** source
+- A custom metric can be associated with **multiple** sources
+- An attribute can be associated with single or multiple sources
+
+| dictionary_id | source_id | category_id |
+|---|---|---|
+| 1 | 1 (Shopify) | 1 (Commerce) |
+| 2 | 2 (Google Ads) | 2 (Paid Media) |
+| 3 | 2 (Google Ads) | 2 (Paid Media) |
+| 3 | 3 (Facebook Ads) | 2 (Paid Media) |
+
+## Design Principles
+
+- **Single Source of Truth** -- All metrics, formulas, and dimensions originate from the data dictionary
+- **Extensible** -- Adding a new system metric only requires inserting a row
+- **Multi-Tenant** -- Metrics can be client- or agency-specific via `client_id` and `agency_id`
+- **Soft Delete & Audit** -- `is_deleted` plus timestamps ensure traceability
+- **Metrics + Dimensions** -- `is_dimension` differentiates grouping dimensions from value metrics

@@ -1,0 +1,96 @@
+---
+title: "Example: LinkedIn Ads Report"
+description: "End-to-end walkthrough of creating a LinkedIn Ads system report"
+icon: "flask"
+---
+
+## Scenario
+
+Create a system-defined report for **LinkedIn Ads** data. LinkedIn data is stored across these tables:
+
+| Table | Level |
+|---|---|
+| interaction_insight_ads_tracker | Account |
+| interaction_insight_ads_campaigntracker | Campaign |
+| interaction_insight_ads_adsettracker | AdSet |
+| ads_adtracker | Ads |
+
+## Walkthrough
+
+<Steps>
+  <Step title="Add dictionary entries">
+    Create metrics for **each level** in `report_data_dictionary`:
+
+    | metric | source_table | source_column | level |
+    |---|---|---|---|
+    | impressions | interaction_insight_ads_tracker | impressions | Account |
+    | clicks | interaction_insight_ads_tracker | clicks | Account |
+    | spend | interaction_insight_ads_tracker | cost | Account |
+    | clicks | interaction_insight_ads_campaigntracker | clicks | Campaign |
+    | spend | ads_adtracker | cost | Ads |
+
+    <Info>
+    Create entries at every level even though the system report only uses Account level. Campaign, AdSet, and Ads level entries are used for custom reports and drill-down views.
+    </Info>
+  </Step>
+
+  <Step title="Map metrics to source">
+    Insert all dictionary IDs into `report_custom_fields`:
+
+    ```sql
+    INSERT INTO report_custom_fields (dictionary_id, source_id, category_id)
+    VALUES
+      (101, 5, 2),  -- impressions → LinkedIn Ads → Paid Media
+      (102, 5, 2),  -- clicks → LinkedIn Ads → Paid Media
+      (103, 5, 2);  -- spend → LinkedIn Ads → Paid Media
+    ```
+
+    Now the LinkedIn source only exposes LinkedIn metrics.
+  </Step>
+
+  <Step title="Create the report">
+    Insert into `report_master`:
+
+    ```sql
+    INSERT INTO report_master (report_name, report_type)
+    VALUES ('LinkedIn Ads', 'System');
+    -- Returns report_id = 42
+    ```
+  </Step>
+
+  <Step title="Map report to source">
+    Insert into `report_source_master`:
+
+    ```sql
+    INSERT INTO report_source_master (report_id, source_id)
+    VALUES (42, 5);  -- LinkedIn Ads report → LinkedIn Ads source
+    ```
+  </Step>
+
+  <Step title="Configure the template">
+    Add **Account-level only** metrics to `report_template_master`:
+
+    ```sql
+    INSERT INTO report_template_master
+      (report_id, dictionary_id, display_order, is_sticky)
+    VALUES
+      (42, 101, 1, false),  -- impressions
+      (42, 102, 2, false),  -- clicks
+      (42, 103, 3, false);  -- spend
+    ```
+
+    <Warning>
+    Do **not** add Campaign, AdSet, or Ads level metrics here. Account level already contains aggregated totals for system reports.
+    </Warning>
+  </Step>
+
+  <Step title="Verify">
+    The report should now appear automatically in the UI. The reporting engine will:
+
+    1. Read metrics from `report_data_dictionary` for IDs 101, 102, 103
+    2. Filter by source (LinkedIn Ads)
+    3. Apply the template configuration (display order, labels)
+    4. Build SQL queries against `interaction_insight_ads_tracker`
+    5. Render the report
+  </Step>
+</Steps>
