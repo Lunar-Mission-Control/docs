@@ -1,0 +1,133 @@
+---
+title: "Creating System Reports"
+description: "Step-by-step guide to creating configuration-driven system reports"
+icon: "plus"
+---
+
+## Overview
+
+System-defined reports are **fully configuration-driven** -- no backend code changes required. A new report is created entirely by inserting records into the appropriate tables.
+
+The reporting engine flow:
+
+```
+Category → Source → Dictionary Metrics → Report → Template Mapping
+```
+
+If these mappings exist correctly, the report **automatically works**.
+
+## Step-by-Step Process
+
+<Steps>
+  <Step title="Create Category">
+    **Table:** `category_master`
+
+    Add a logical grouping for the platform if one doesn't exist.
+
+    ```
+    Paid Media, Commerce, Analytics/Attribution
+    ```
+  </Step>
+
+  <Step title="Create Source">
+    **Table:** `source_master`
+
+    Add the platform under the category.
+
+    - Set `client_id = 0` for system/global sources
+
+    ```
+    LinkedIn Ads → category_id = Paid Media
+    ```
+  </Step>
+
+  <Step title="Add Metrics and Dimensions">
+    **Table:** `report_data_dictionary`
+
+    Insert metrics (clicks, spend, impressions) and dimensions (account, campaign). For each entry define:
+
+    | Field | Description |
+    |---|---|
+    | `source_table` | Database table to pull from |
+    | `source_column` | Column name in source table |
+    | `entry_type` | Set to `System` |
+    | `level` | `Account`, `Campaign`, `AdSet`, `Ads`, `Orders` |
+    | `attribute` | For custom dimensions |
+
+    This step defines **what data exists**.
+  </Step>
+
+  <Step title="Map Metrics to Source">
+    **Table:** `report_custom_fields`
+
+    Create the mapping between dictionary entries and sources:
+
+    ```
+    dictionary_id ↔ category_id ↔ source_id
+    ```
+
+    This ensures only valid metrics appear for that source and enables safe query generation.
+  </Step>
+
+  <Step title="Create Report">
+    **Table:** `report_master`
+
+    Insert a new report record:
+
+    | Field | Value |
+    |---|---|
+    | `report_name` | e.g., "LinkedIn Ads" |
+    | `report_type` | `System` |
+
+    This generates a `report_id` used in subsequent steps.
+  </Step>
+
+  <Step title="Map Report to Source">
+    **Table:** `report_source_master`
+
+    Link the report to its data source:
+
+    ```
+    report_id ↔ source_id
+    ```
+
+    This tells the engine which data sources feed this report.
+  </Step>
+
+  <Step title="Configure Columns (Template)">
+    **Table:** `report_template_master`
+
+    Define how the report appears in the UI:
+
+    - Which metrics appear
+    - Display order
+    - Column labels
+    - Sticky columns
+    - Formula overrides (if needed)
+
+    <Warning>
+    For system reports, only add **Account-level** metrics. Do not add Campaign, AdSet, or Ads level metrics -- Account level already contains aggregated totals.
+    </Warning>
+  </Step>
+</Steps>
+
+## System Report Constraints
+
+System-defined reports follow these rules:
+
+| Rule | Detail |
+|---|---|
+| Aggregation | Always aggregated (no granular drill-down) |
+| Granularity | Always daily |
+| Level behavior | Varies by source type (see below) |
+
+### Level by Source Type
+
+| Source Type | Level Used |
+|---|---|
+| Paid Media | Account |
+| Shopify | null |
+| Analytics | Analytics Report |
+| Mission Control | null |
+
+Only **top-level aggregated metrics** should be added to `report_template_master` for system reports.

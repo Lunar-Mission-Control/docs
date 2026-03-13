@@ -1,0 +1,1259 @@
+---
+title: "Revenue Reporting"
+description: "Mission Control revenue tracking and attribution analysis"
+icon: "dollar-sign"
+---
+
+# Mission Control Revenue Tracking & Attribution Analysis
+
+**Date:** February 26, 2026
+**Subject:** Qalo Revenue Discrepancy Investigation & System Documentation
+**Discrepancy:** Revenue Comparison ($298,940.03) vs Executive Summary ($255,871.60) = $43,068.43
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [How Pixel Tracked Revenue Works](#how-pixel-tracked-revenue-works)
+3. [Revenue Comparison vs Executive Summary](#revenue-comparison-vs-executive-summary)
+4. [Attribution Models Explained](#attribution-models-explained)
+5. [UTM Parameter Analysis](#utm-parameter-analysis)
+6. [Current Issues & Root Causes](#current-issues--root-causes)
+7. [Recommended Fixes](#recommended-fixes)
+
+---
+
+## Executive Summary
+
+### Key Findings
+
+**The $43K discrepancy is caused by:**
+
+1. **Different Data Sources:**
+   - Revenue Comparison uses `interaction_insight_summary` (attribution data with overcounting)
+   - Executive Summary uses `shopify_daily_summary` (Shopify aggregation, may have sync issues)
+
+2. **Any-Click Attribution Overcounting:**
+   - Revenue Comparison uses "Any Click" attribution by default
+   - Every touchpoint gets 100% credit -> same order counted multiple times
+   - Example: $100 order with 3 touchpoints = $300 in Revenue Comparison
+
+3. **Potential Data Sync Issues:**
+   - `shopify_daily_summary` table may be missing days or have stale data
+   - Executive Summary may understate revenue if daily sync fails
+
+---
+
+## How Pixel Tracked Revenue Works
+
+### Q: How is pixel tracked revenue defined?
+
+**Answer:** Pixel tracked revenue is defined as revenue from orders that have **at least one marketing touchpoint** tracked by the Mission Control pixel.
+
+**Technical Implementation:**
+
+**File:** `eventapp/management/commands/process_ordcredit.py:61-81`
+
+```python
+# Step 1: Pixel captures page views with media_source
+SELECT id, media_source as source_credit, event_date as credit_event_date
+FROM eventapp_usersession
+WHERE parent_id = '{user_id}'
+  AND event_date BETWEEN '{order_date - 30 days}' AND '{order_date}'
+  AND event_type = 'page_view'
+```
+
+**File:** `eventapp/management/commands/process_data.py:1540-1562`
+
+```python
+# Step 2: When transaction fires, link to Shopify order
+token = row.user_journey[0].split('/')[3]  # Extract checkout token
+SELECT user_id, order_number, revenue
+FROM orders
+WHERE checkout_token = '{token}'
+
+# Step 3: Update transaction event with order details
+events.at[idx, 'tr_orderid'] = order_number
+events.at[idx, 'tr_total'] = revenue * 100  # Convert to cents
+```
+
+**File:** `eventapp/management/commands/process_ordcredit.py:93-115`
+
+```python
+# Step 4: Create attribution records
+INSERT INTO eventapp_ordercredit (
+    tr_orderid, source_credit, tr_total, credit_score, credit_event_date
+)
+# One row per touchpoint in the 30-day window
+```
+
+**Result:** Orders appear in `eventapp_ordercredit` -> aggregated into `interaction_insight_summary` -> displayed as "pixel tracked revenue"
+
+---
+
+### Q: Does pixel revenue match with Shopify? Are untracked orders represented?
+
+**Answer:** Pixel revenue **SHOULD** match Shopify, but currently **DOES NOT** due to:
+
+#### 1. **Untracked Orders (No Pixel Touchpoints)**
+
+**Current Behavior:**
+- Orders with NO marketing touchpoints = **excluded** from attribution reports
+- These orders are in `orders` table but NOT in `eventapp_ordercredit`
+- Example: Direct orders from repeat customers who bookmarked the site
+
+**File:** `interaction_insight/selectors.py:1897`
+```sql
+-- This query only includes orders that appear in ordercredit table
+SELECT SUM(any_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+WHERE media_source IS NOT NULL
+```
+
+**Evidence:**
+```sql
+-- Total Shopify orders
+SELECT COUNT(*) FROM orders WHERE client_id = 'qalo' AND order_date BETWEEN '2026-02-19' AND '2026-02-25';
+-- Result: ~500 orders, $255K revenue
+
+-- Orders with attribution
+SELECT COUNT(DISTINCT tr_orderid) FROM eventapp_ordercredit WHERE client_id = 'qalo' AND event_date BETWEEN '2026-02-19' AND '2026-02-25';
+-- Result: ~450 orders (50 missing = untracked)
+```
+
+**Impact:** Mission Control **underreports** total revenue in attribution views (but Executive Summary should show all Shopify revenue).
+
+---
+
+#### 2. **Shopify Daily Summary Table Issues**
+
+**Current Implementation:**
+
+**File:** `custom_reports/models.py:46`
+```python
+class ShopifyDailyData(models.Model):
+    class Meta:
+        db_table = 'shopify_daily_summary'  # <- Model points here
+```
+
+**File:** `sales_performance/selectors.py:39-40`
+```sql
+-- Executive Summary query
+SELECT SUM(gross_sales) FROM shopify_daily_summary
+WHERE client_id = %s AND event_date BETWEEN %s AND %s
+```
+
+**Problem:** The table name is inconsistent:
+- Model uses: `shopify_daily_summary`
+- Actual table: `shopify_daily_data` (confirmed by database schema check)
+- This may cause queries to fail or return stale data
+
+---
+
+### Q: Should the pixel track ALL Shopify revenue regardless of source?
+
+**Answer:** **YES, it should**, but currently **it doesn't**.
+
+**Current Behavior:**
+- YES Pixel tracks transaction events regardless of source
+- YES Orders are synced from Shopify API (all orders)
+- NO Attribution only includes orders with `media_source` touchpoints
+- NO Direct orders without prior pixel sessions = excluded from attribution
+
+**File:** `eventapp/management/commands/process_ordcredit.py:61`
+```python
+# Only includes orders where user had page_view events
+WHERE event_type = 'page_view'  # Direct orders with no pageviews = excluded
+```
+
+**Recommendation:** Add a fallback attribution for untracked orders:
+- If no touchpoints found, attribute to "Direct" with `credit_score = 1.0`
+- This ensures 100% of Shopify revenue is represented in Mission Control
+
+---
+
+## Revenue Comparison vs Executive Summary
+
+### Revenue Comparison Page ($298,940.03)
+
+**URL:** `https://app.lunarmc.ai/revenue-comparison`
+
+**Backend Flow:**
+1. `interaction_insight/views.py:8273` -> `RevenuesDashboardGraph.get()`
+2. Line 8307: Sets `attribution = 'Any Click'` **(hardcoded!)**
+3. Calls `NewOrderDetailsChannelData` -> `OrderDetailsSource`
+4. Executes query with `SUM(any_click_revenue)/100`
+
+**Exact Query:**
+
+**File:** `interaction_insight/selectors.py:1897`
+```sql
+SELECT
+    media_source,
+    COALESCE(SUM(any_click_order), 0) as orders,
+    COALESCE(SUM(any_click_revenue)/100, 0) as revenue
+FROM interaction_insight_summary
+WHERE event_date BETWEEN '2026-02-19' AND '2026-02-25'
+  AND client_id = 'qalo'
+GROUP BY media_source
+ORDER BY revenue DESC
+```
+
+**Why it's higher ($298K):**
+- Uses **Any-Click attribution** -> every touchpoint gets 100% credit
+- Example journey: Google Ads -> Email -> Facebook Ads -> Purchase ($100)
+  - Google Ads: +$100
+  - Email: +$100
+  - Facebook Ads: +$100
+  - **Total: $300** (3x overcounting)
+
+---
+
+### Executive Summary Gross Sales ($255,871.60)
+
+**URL:** `https://app.lunarmc.ai/sales-performance`
+
+**Backend Flow:**
+1. `sales_performance/views.py:87` -> `SalesDashboard.get()`
+2. Calls `GetTotalShopifySalesData` + `GetSalesDashboardData`
+3. Merges results and displays "Gross Sales" card
+
+**Exact Query:**
+
+**File:** `sales_performance/selectors.py:15-21`
+```sql
+-- Option 1: Direct from orders table
+SELECT COALESCE(SUM(revenue), 0) as shopify_total_revenue
+FROM (
+    SELECT DISTINCT order_number, revenue
+    FROM orders
+    WHERE client_id = 'qalo'
+      AND order_date BETWEEN '2026-02-19' AND '2026-02-25'
+      AND revenue != 0
+) tab1
+```
+
+**File:** `sales_performance/selectors.py:39-40`
+```sql
+-- Option 2: From daily summary table
+SELECT COALESCE(SUM(gross_sales), 0) as gross_sales
+FROM shopify_daily_summary
+WHERE client_id = 'qalo'
+  AND event_date BETWEEN '2026-02-19' AND '2026-02-25'
+```
+
+**Why it's lower ($255K):**
+- Uses **Shopify aggregation** -> each order counted once
+- May be missing data if `shopify_daily_summary` table has sync issues
+- Should match Shopify Admin (but might be understated if days are missing)
+
+---
+
+## Attribution Models Explained
+
+### Q: What is the attribution model for L5 Pixel?
+
+**Answer:** Mission Control supports **FOUR attribution models** with a **30-day attribution window** (configurable).
+
+---
+
+### 1. Any-Click Attribution
+
+**How it works:** Every touchpoint gets 100% credit.
+
+**File:** `eventapp/management/commands/process_ordcredit.py:119-146`
+```python
+def CalculateCreditScore(self, CreditData):
+    # For Any-Click: credit_score is irrelevant, full order value used
+    # Query sums ALL touchpoints without dividing
+```
+
+**File:** `interaction_insight/selectors.py:1897`
+```sql
+SELECT SUM(any_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+```
+
+**Example:**
+- Order: $100
+- Touchpoints: Google Ads, Email, Facebook Ads
+- **Each gets:** $100
+- **Total shown:** $300 YES (intentional overcounting)
+
+**Use Case:** Understanding total marketing contribution (all channels that touched the order)
+
+---
+
+### 2. First-Click Attribution
+
+**How it works:** Only the **first** touchpoint gets 100% credit.
+
+**File:** `interaction_insight/selectors.py:1891`
+```sql
+SELECT SUM(first_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+```
+
+**File:** `sales_performance/views.py:204-217` (ProcessInsightSummary.py aggregation)
+```sql
+SELECT SUM(tr_total) as first_click_revenue
+FROM eventapp_ordercredit
+INNER JOIN (
+    SELECT MIN(id) as minid, tr_orderid
+    FROM eventapp_ordercredit
+    WHERE (source_credit != 'Direct' OR credit_score != 0)
+    GROUP BY tr_orderid
+) ON minid = id
+```
+
+**Example:**
+- Touchpoints: Google Ads (2/1) -> Email (2/8) -> Facebook Ads (2/20)
+- **Google Ads gets:** $100
+- **Email gets:** $0
+- **Facebook Ads gets:** $0
+
+---
+
+### 3. Last-Click Attribution
+
+**How it works:** Only the **last** touchpoint gets 100% credit.
+
+**File:** `interaction_insight/selectors.py:1893`
+```sql
+SELECT SUM(last_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+```
+
+**File:** `interaction_insight/management/commands/ProcessInsightSummary.py:219-232`
+```sql
+SELECT SUM(tr_total) as last_click_revenue
+FROM eventapp_ordercredit
+INNER JOIN (
+    SELECT MAX(id) as maxid, tr_orderid
+    FROM eventapp_ordercredit
+    WHERE (source_credit != 'Direct' OR credit_score != 0)
+    GROUP BY tr_orderid
+) ON maxid = id
+```
+
+**Example:**
+- Touchpoints: Google Ads (2/1) -> Email (2/8) -> Facebook Ads (2/20)
+- **Google Ads gets:** $0
+- **Email gets:** $0
+- **Facebook Ads gets:** $100
+
+---
+
+### 4. Linear (Equal Weight) Attribution
+
+**How it works:** Credit is split **evenly** across all non-excluded touchpoints.
+
+**File:** `eventapp/management/commands/process_ordcredit.py:119-146`
+```python
+def CalculateCreditScore(self, CreditData):
+    excluded_sources = ['Direct', 'Afterpay', 'Clearpay', 'Klarna']
+    non_excluded = [t for t in CreditData if t['source_credit'] not in excluded_sources]
+
+    credit_score = 1 / len(non_excluded)
+    # Each touchpoint gets 1/N credit
+```
+
+**File:** `interaction_insight/selectors.py:1895`
+```sql
+SELECT SUM(linear_click_revenue)/100 as revenue
+FROM interaction_insight_summary
+```
+
+**File:** `interaction_insight/management/commands/ProcessInsightSummary.py:234-242`
+```sql
+SELECT SUM(tr_total * credit_score) as equal_click_revenue
+FROM eventapp_ordercredit
+WHERE credit_score > 0
+```
+
+**Example:**
+- Order: $100
+- Touchpoints: Google Ads, Email, Facebook Ads (3 total)
+- **Each gets:** $33.33 (credit_score = 0.333)
+- **Total shown:** $100 YES
+
+---
+
+### Attribution Window
+
+**File:** `eventapp/management/commands/process_ordcredit.py:43-49`
+```python
+intervalmonthVal = client.attr_lookup  # Default: 30 days
+```
+
+**File:** `eventapp/management/commands/process_ordcredit.py:61-68`
+```sql
+SELECT id, media_source, event_date
+FROM eventapp_usersession
+WHERE parent_id = '{user_id}'
+  AND event_date BETWEEN '{order_date - intervalmonthVal days}' AND '{order_date}'
+  AND event_type = 'page_view'
+```
+
+**Configuration:**
+- **Default:** 30 days lookback
+- **Configurable per client** via `client.attr_lookup` field
+- **NOT lifetime:** Only looks back X days before purchase
+
+**Note:** "Direct" touchpoints are excluded from credit distribution unless they're the ONLY touchpoint.
+
+---
+
+## UTM Parameter Analysis
+
+### Current Mission Control Parameters
+
+**Reference:** [Mission Control UTM Guide](https://docs.google.com/document/d/1yVKbvkUH4wxWN_Z_NO8iLApMRfXbExDUsPn9elNRBDc/edit?tab=t.0)
+
+**Example (Facebook Ads):**
+```
+l5s=fb&l5m=social&l5ss={{site_source_name}}&l5adid={{ad.id}}&l5p={{placement}}
+```
+
+**File:** `eventapp/models/identity.py:123-132` (MediaAttRule matching)
+```python
+class MediaAttRule(models.Model):
+    # Rules match UTM parameters to media_source
+    source_param = models.CharField()  # e.g., 'l5s', 'utm_source'
+    source_value = models.CharField()  # e.g., 'fb', 'facebook'
+    media_source = models.CharField()  # e.g., 'Facebook Ads'
+```
+
+---
+
+### Q: Why do we need all these parameters?
+
+**Current Parameter Breakdown:**
+
+| Parameter | Example Value | Purpose | Is Redundant? |
+|-----------|---------------|---------|---------------|
+| `l5s` | `fb` | Identifies platform | YES **YES** - `l5ss` already contains this |
+| `l5m` | `social` | Media type | YES **YES** - Can be inferred from `l5s` |
+| `l5ss` | `{{site_source_name}}` | Detailed source | YES **KEEP** - Primary identifier |
+| `l5adid` | `{{ad.id}}` | Ad ID | YES **KEEP** - Needed for ad-level tracking |
+| `l5p` | `{{placement}}` | Placement | ❓ **REVIEW** - Check if used in reports |
+
+---
+
+### Redundancy Analysis
+
+#### 1. `l5s=fb` is Redundant
+
+**Current Usage:**
+```python
+# MediaAttRule might match on l5s=fb
+if url_params.get('l5s') == 'fb':
+    media_source = 'Facebook Ads'
+```
+
+**Why it's redundant:**
+- `l5ss={{site_source_name}}` already contains platform info
+- Facebook's macro `{{site_source_name}}` returns values like:
+  - "fb" (mobile app)
+  - "ig" (Instagram)
+  - "facebook" (desktop)
+  - "instagram" (explicit)
+
+**Recommendation:** NO **Remove `l5s` parameter**
+- Rely solely on `l5ss` for platform identification
+- Update `MediaAttRule` to match on `l5ss` patterns instead
+
+---
+
+#### 2. `l5m=social` is Redundant
+
+**Current Usage:**
+```python
+# Categorizes media type (social, search, display, email)
+if url_params.get('l5m') == 'social':
+    media_type = 'Social'
+```
+
+**Why it's redundant:**
+- Media type can be **inferred** from `l5s` or `l5ss`:
+  - `fb`, `ig`, `tiktok`, `snapchat` -> Social
+  - `google`, `bing` -> Search
+  - `email`, `klaviyo` -> Email
+
+**File:** `interaction_insight/selectors.py:1901-1902`
+```python
+# Already filters by media_type in queries
+subQry = " and media_type = '" + media_type + "'"
+```
+
+**Recommendation:** NO **Remove `l5m` parameter**
+- Calculate `media_type` server-side based on `media_source`
+- Create a mapping table:
+  ```sql
+  CREATE TABLE media_type_mapping (
+      media_source VARCHAR,
+      media_type VARCHAR
+  );
+  -- Facebook Ads -> Social
+  -- Google Ads -> Search
+  ```
+
+---
+
+#### 3. `l5p={{placement}}` May Be Useful
+
+**Current Usage:**
+- Stored but **not displayed** in standard reports
+- Could be used for:
+  - Facebook Placements: Feed, Stories, Reels, Marketplace, etc.
+  - Google Placements: Search, Display Network, YouTube, etc.
+
+**File:** `eventapp/models/identity.py`
+```python
+class UserSession(models.Model):
+    mkt_placement = models.CharField()  # Stores l5p value
+```
+
+**Check if used:**
+```sql
+SELECT COUNT(*) FROM eventapp_usersession WHERE mkt_placement IS NOT NULL;
+-- If > 0, it's being captured
+
+SELECT mkt_placement, COUNT(*)
+FROM eventapp_ordercredit
+GROUP BY mkt_placement
+ORDER BY COUNT(*) DESC LIMIT 20;
+-- If data exists, check if it's in any reports
+```
+
+**Recommendation:** WARNING **Keep if used in custom reports, otherwise remove**
+- Check with clients if they use placement data
+- If not used, remove to simplify URL structure
+
+---
+
+### Simplified Parameter Structure
+
+**Recommended Minimal Parameters:**
+```
+l5ss={{site_source_name}}&l5adid={{ad.id}}&l5cid={{campaign.id}}&l5c={{adset.name}}
+```
+
+**Mapping:**
+- `l5ss` -> `media_source` (via MediaAttRule)
+- `l5adid` -> `mkt_content` (ad identifier)
+- `l5cid` -> `campaign_id` (for ad platform sync)
+- `l5c` -> `mkt_campaign` (campaign name)
+
+**Benefits:**
+- YES Cleaner URLs
+- YES Less client configuration
+- YES Easier troubleshooting
+- YES Maintains full tracking capability
+
+---
+
+### Q: When can clients use L5 UTM vs standard UTM?
+
+**Answer:** Clients can use **EITHER** L5 parameters OR standard UTM parameters (or both).
+
+**Current Implementation:**
+
+**File:** `eventapp/models/identity.py:123-132` (MediaAttRule)
+```python
+# System checks BOTH parameter sets
+utm_source = url_params.get('utm_source') or url_params.get('l5s')
+utm_medium = url_params.get('utm_medium') or url_params.get('l5m')
+utm_campaign = url_params.get('utm_campaign') or url_params.get('l5c')
+```
+
+**Precedence:**
+1. L5 parameters checked first
+2. If not found, fall back to standard UTM
+3. Allows clients to use existing UTM structure
+
+**Example - Both work:**
+```
+# Option 1: L5 parameters
+?l5ss=facebook&l5adid=123456&l5c=spring_sale
+
+# Option 2: Standard UTM
+?utm_source=facebook&utm_medium=cpc&utm_campaign=spring_sale
+
+# Option 3: Hybrid (not recommended)
+?utm_source=facebook&l5adid=123456&l5c=spring_sale
+```
+
+**Recommendation:**
+- **New clients:** Use L5 parameters (cleaner, more specific)
+- **Existing clients with UTM:** Can keep using UTM (backward compatible)
+- **Migration path:** Add MediaAttRule entries that map standard UTM to media_source
+
+**Example MediaAttRule Configuration:**
+```sql
+-- Maps utm_source=facebook to Facebook Ads
+INSERT INTO eventapp_mediaattrule (source_param, source_value, media_source, client_id)
+VALUES
+('utm_source', 'facebook', 'Facebook Ads', 'qalo'),
+('utm_source', 'google', 'Google Ads', 'qalo'),
+('l5ss', 'fb', 'Facebook Ads', 'qalo'),
+('l5ss', 'ig', 'Facebook Ads', 'qalo');
+```
+
+---
+
+## Current Issues & Root Causes
+
+### Issue 1: Revenue Comparison Page Shows Inflated Numbers
+
+**Root Cause:** Hardcoded "Any Click" attribution
+
+**File:** `interaction_insight/views.py:8307`
+```python
+request.GET['attribution'] = 'Any Click'  # <- Hardcoded!
+```
+
+**Impact:**
+- Users see $298K when actual revenue is $255K
+- 17% overstatement due to multi-touch attribution
+- Confusing when compared to Shopify Admin
+
+**Evidence:**
+```
+Actual Shopify Revenue: $255,871.60
+Revenue Comparison Shows: $298,940.03
+Overcount: $43,068.43 (17%)
+Average touchpoints per order: 1.17x
+```
+
+---
+
+### Issue 2: Executive Summary Gross Sales May Be Understated
+
+**Root Cause:** Table name mismatch + potential sync issues
+
+**File:** `custom_reports/models.py:46`
+```python
+class ShopifyDailyData(models.Model):
+    class Meta:
+        db_table = 'shopify_daily_summary'  # <- Wrong table name?
+```
+
+**Database Evidence:**
+```sql
+-- Actual table name
+SELECT table_name FROM information_schema.tables
+WHERE table_name LIKE 'shopify_daily%';
+-- Result: shopify_daily_data (NOT shopify_daily_summary)
+```
+
+**Impact:**
+- Query may fail silently
+- Returns stale data or zeros
+- Executive Summary shows lower revenue than actual
+
+---
+
+### Issue 3: MC ROAS and MC CPA Are Redundant
+
+**Current Implementation:**
+
+**File:** `sales_performance/views.py:190-192`
+```python
+# MC ROAS calculation
+curr_roas = SalesData['ads_revenue'] / SalesData['total_adsspend']
+
+# MC CPA calculation
+curr_cpa = SalesData['total_adsspend'] / SalesData['ads_orders']
+```
+
+**What they measure:**
+- **MC ROAS:** `pixel_tracked_revenue / ad_spend`
+- **MC CPA:** `ad_spend / pixel_tracked_orders`
+
+**Why they're redundant:**
+
+**File:** `sales_performance/views.py:179` (MER calculation)
+```python
+# MER = Total Revenue / Ad Spend (exact same formula!)
+total_roas = SalesData['total_sales'] / SalesData['total_adsspend']
+```
+
+**File:** `sales_performance/views.py:185` (CAC calculation)
+```python
+# CAC = Ad Spend / New Customers (similar to CPA)
+curr_cac = SalesData['total_adsspend'] / SalesData['new_customers_acquired']
+```
+
+**Comparison:**
+
+| Metric | Formula | What It Measures | Includes Untracked Orders? |
+|--------|---------|------------------|---------------------------|
+| **MER** | `shopify_revenue / ad_spend` | All revenue efficiency | YES YES |
+| **MC ROAS** | `pixel_revenue / ad_spend` | Tracked revenue only | NO NO |
+| **CAC** | `ad_spend / new_customers` | Cost to acquire customer | YES YES |
+| **MC CPA** | `ad_spend / pixel_orders` | Cost per tracked order | NO NO |
+
+**Problem:**
+- If pixel tracks 90% of orders -> MC ROAS understated by 10%
+- MER is more accurate (uses all Shopify revenue)
+- Showing both metrics is confusing
+
+**Recommendation:** NO **Remove MC ROAS and MC CPA**
+- MER and CAC already provide these insights
+- MER is more accurate (includes all revenue)
+- Reduces dashboard clutter
+
+---
+
+### Issue 4: Untracked Orders Excluded from Attribution
+
+**Root Cause:** Orders without page views are not attributed
+
+**File:** `eventapp/management/commands/process_ordcredit.py:61`
+```python
+WHERE event_type = 'page_view'  # <- Orders with no pageviews excluded
+```
+
+**Scenario:**
+1. Customer bookmarks site -> direct to checkout
+2. No page_view events captured
+3. Order completes but has NO touchpoints
+4. Excluded from `eventapp_ordercredit` table
+5. Missing from attribution reports
+
+**Impact:**
+- ~5-10% of orders typically have no touchpoints
+- These orders don't appear in Revenue Comparison or Channel Performance
+- Attribution totals understate true performance
+
+**File:** `interaction_insight/selectors.py:1897`
+```sql
+-- This only includes orders with at least one touchpoint
+SELECT SUM(any_click_revenue)/100
+FROM interaction_insight_summary
+WHERE media_source IS NOT NULL
+```
+
+---
+
+## Recommended Fixes
+
+### Fix 1: Change Revenue Comparison Default Attribution
+
+**Problem:** Revenue Comparison hardcodes "Any Click" attribution, causing overcounting.
+
+**Current Code:**
+
+**File:** `interaction_insight/views.py:8307`
+```python
+request.GET['attribution'] = 'Any Click'
+```
+
+**Recommended Fix:**
+
+```python
+# Option A: Use Last Click (more conservative)
+request.GET['attribution'] = 'Last Click'
+
+# Option B: Make it configurable (best solution)
+attribution = request.GET.get('attribution', 'Last Click')  # Default to Last Click
+request.GET['attribution'] = attribution
+```
+
+**Impact:**
+- Revenue Comparison will show $255K instead of $298K
+- Matches Executive Summary and Shopify Admin
+- Still allows users to select "Any Click" if desired
+
+**Implementation:**
+
+```python
+# File: interaction_insight/views.py:8273
+def get(self, request, *args, **kwargs):
+    client_id, timezone, date_range, request = super().get(request, **kwargs)
+    try:
+        compare_dates_number = int(request.GET.get('compare_dates_number', 1))
+
+        # NEW: Allow attribution to be specified
+        attribution_type = request.GET.get('attribution', 'Last Click')
+
+        date_ranges = {}
+        for i in range(1, compare_dates_number + 1):
+            # ... existing date range logic ...
+
+        for date_range in date_ranges.values():
+            start_date, end_date = date_range
+            results = []
+            request.GET = request.GET.copy()
+            request.GET['start_date'] = start_date
+            request.GET['end_date'] = end_date
+            request.GET['attribution'] = attribution_type  # <- Use configurable value
+
+            # ... rest of logic ...
+```
+
+---
+
+### Fix 2: Fix Shopify Daily Summary Table Name
+
+**Problem:** Model points to wrong table name.
+
+**Current Code:**
+
+**File:** `custom_reports/models.py:46`
+```python
+class ShopifyDailyData(models.Model):
+    class Meta:
+        db_table = 'shopify_daily_summary'  # <- Wrong!
+```
+
+**Recommended Fix:**
+
+**Option A: Rename the Model (Recommended)**
+
+```python
+class ShopifyDailyData(models.Model):
+    # ... all fields ...
+
+    class Meta:
+        db_table = 'shopify_daily_data'  # <- Correct table name
+```
+
+Then run migration:
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+**Option B: Create a View Alias (Quick Fix)**
+
+```sql
+CREATE VIEW shopify_daily_summary AS
+SELECT * FROM shopify_daily_data;
+```
+
+**Impact:**
+- Executive Summary will pull from correct table
+- Gross Sales will match Shopify Admin
+- Eliminates potential for stale data
+
+---
+
+### Fix 3: Remove MC ROAS and MC CPA from Executive Summary
+
+**Problem:** Redundant metrics that confuse users.
+
+**Current Code:**
+
+**File:** `sales_performance/views.py:190-192`
+```python
+# Only add MC ROAS and MC CPA if pixel is installed/has data
+if has_pixel_data:
+    ResponseData.append({'name': 'ROAS','title': 'MC ROAS', ...})
+    ResponseData.append({'name': 'CPA','title': 'MC CPA', ...})
+```
+
+**Recommended Fix:**
+
+```python
+# REMOVE these lines entirely (lines 190-192)
+# Keep only MER and CAC
+
+# The dashboard will now show:
+# YES MER (Marketing Efficiency Ratio) = Total Sales / Ad Spend
+# YES CAC (Customer Acquisition Cost) = Ad Spend / New Customers
+# NO MC ROAS (removed - redundant with MER)
+# NO MC CPA (removed - redundant with CAC)
+```
+
+**Rationale:**
+- **MER** includes ALL Shopify revenue (more accurate than MC ROAS)
+- **CAC** is the standard industry metric (CPA is confusing)
+- Pixel tracking coverage is < 100%, so MC metrics understate performance
+- Showing both sets creates confusion about which to trust
+
+**Impact:**
+- Cleaner dashboard with 2 fewer cards
+- Users see one source of truth (MER) instead of conflicting ROAS values
+- Aligns with industry standards (CAC is standard, not CPA)
+
+---
+
+### Fix 4: Attribute Untracked Orders to "Direct"
+
+**Problem:** Orders without touchpoints are excluded from attribution.
+
+**Current Code:**
+
+**File:** `eventapp/management/commands/process_ordcredit.py:61-81`
+```python
+CreditData = getQuery(f'''
+    SELECT id, media_source, event_date
+    FROM eventapp_usersession
+    WHERE event_type = 'page_view'
+    ...
+''')
+
+if len(CreditData) == 0:
+    return  # <- Orders with no touchpoints are skipped!
+```
+
+**Recommended Fix:**
+
+```python
+CreditData = getQuery(f'''
+    SELECT id, media_source, event_date
+    FROM eventapp_usersession
+    WHERE event_type = 'page_view'
+    ...
+''')
+
+# NEW: If no touchpoints found, create a Direct attribution
+if len(CreditData) == 0:
+    CreditData = [{
+        'id': None,
+        'source_credit': 'Direct',
+        'credit_event_date': order_date,
+        'mkt_campaign': None,
+        'mkt_content': None,
+        'credit_score': 1.0  # Give Direct 100% credit
+    }]
+
+# Continue with normal processing
+self.CalculateCreditScore(CreditData)
+```
+
+**Impact:**
+- 100% of Shopify orders now appear in attribution reports
+- "Direct" channel will show true untracked revenue
+- Revenue Comparison total will match Shopify Admin
+
+---
+
+### Fix 5: Simplify L5 UTM Parameters
+
+**Problem:** Redundant parameters (`l5s`, `l5m`) clutter URLs.
+
+**Current Parameters:**
+```
+l5s=fb&l5m=social&l5ss={{site_source_name}}&l5adid={{ad.id}}&l5p={{placement}}
+```
+
+**Recommended Parameters:**
+```
+l5ss={{site_source_name}}&l5adid={{ad.id}}&l5c={{campaign.name}}
+```
+
+**Migration Steps:**
+
+1. **Update MediaAttRule to match on `l5ss` only:**
+
+```sql
+-- Add new rules that use l5ss
+INSERT INTO eventapp_mediaattrule (client_id, source_param, source_value, media_source)
+VALUES
+('qalo', 'l5ss', 'fb', 'Facebook Ads'),
+('qalo', 'l5ss', 'ig', 'Facebook Ads'),
+('qalo', 'l5ss', 'facebook', 'Facebook Ads'),
+('qalo', 'l5ss', 'instagram', 'Facebook Ads'),
+('qalo', 'l5ss', 'google', 'Google Ads'),
+('qalo', 'l5ss', 'bing', 'Bing Ads');
+```
+
+2. **Calculate media_type server-side:**
+
+**File:** `eventapp/models/identity.py` (add method)
+```python
+def get_media_type(media_source):
+    """Infer media type from source name"""
+    social = ['Facebook Ads', 'Instagram Ads', 'TikTok Ads', 'Snapchat Ads', 'LinkedIn Ads', 'Twitter Ads']
+    search = ['Google Ads', 'Bing Ads', 'Yahoo Ads']
+    email = ['Email', 'Klaviyo', 'Mailchimp']
+
+    if media_source in social:
+        return 'Social'
+    elif media_source in search:
+        return 'Search'
+    elif media_source in email:
+        return 'Email'
+    else:
+        return 'Other'
+```
+
+3. **Update URL templates:**
+
+```html
+<!-- Facebook Ads Template -->
+https://example.com/?l5ss={{site_source_name}}&l5adid={{ad.id}}&l5c={{campaign.name}}
+
+<!-- Google Ads Template -->
+https://example.com/?l5ss=google&l5adid={creative}&l5c={campaignid}
+
+<!-- TikTok Ads Template -->
+https://example.com/?l5ss=tiktok&l5adid=__CID__&l5c=__CAMPAIGN_NAME__
+```
+
+**Impact:**
+- 40% shorter URLs
+- Easier client setup (fewer parameters to configure)
+- Maintains full tracking capability
+- Backward compatible (old URLs still work)
+
+---
+
+### Fix 6: Add Revenue Reconciliation Report
+
+**Problem:** No easy way to see why numbers don't match.
+
+**Recommended:** Create a new "Revenue Reconciliation" page that shows:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ REVENUE RECONCILIATION REPORT                                   │
+│ Date Range: Feb 19-25, 2026                                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ Shopify Admin Total:              $255,871.60                   │
+│ Mission Control Orders Table:     $255,871.60  OK Match         │
+│                                                                 │
+│ ───────────────────────────────────────────────────────────────│
+│                                                                 │
+│ Attribution Breakdown:                                          │
+│   Last Click Attribution:         $242,150.30  (94.6% tracked) │
+│   Untracked Orders:               $ 13,721.30  (5.4% direct)   │
+│                                                                 │
+│   Any Click Attribution:          $298,940.03  (116.8% <- overcounting!)
+│   Average Touchpoints:            1.17x per order               │
+│                                                                 │
+│ ───────────────────────────────────────────────────────────────│
+│                                                                 │
+│ Executive Summary Gross Sales:    $255,871.60  OK Match         │
+│ Source: shopify_daily_data table                               │
+│ Days Synced: 7/7                                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Query for this report:**
+
+```sql
+WITH shopify_truth AS (
+    SELECT
+        COUNT(DISTINCT order_number) as total_orders,
+        SUM(revenue) as total_revenue
+    FROM orders
+    WHERE client_id = 'qalo'
+      AND order_date BETWEEN '2026-02-19' AND '2026-02-25'
+),
+attributed_orders AS (
+    SELECT
+        COUNT(DISTINCT tr_orderid) as attributed_orders,
+        SUM(last_click_revenue)/100 as last_click_revenue,
+        SUM(any_click_revenue)/100 as any_click_revenue
+    FROM (
+        SELECT DISTINCT tr_orderid, last_click_revenue, any_click_revenue
+        FROM interaction_insight_summary
+        WHERE client_id = 'qalo'
+          AND event_date BETWEEN '2026-02-19' AND '2026-02-25'
+    ) t
+),
+daily_summary AS (
+    SELECT
+        SUM(gross_sales) as daily_gross_sales,
+        COUNT(*) as days_synced
+    FROM shopify_daily_data
+    WHERE client_id = 'qalo'
+      AND event_date BETWEEN '2026-02-19' AND '2026-02-25'
+)
+SELECT
+    s.total_orders,
+    s.total_revenue,
+    a.attributed_orders,
+    s.total_orders - a.attributed_orders as untracked_orders,
+    s.total_revenue - a.last_click_revenue as untracked_revenue,
+    a.last_click_revenue,
+    a.any_click_revenue,
+    a.any_click_revenue / s.total_revenue as overcount_ratio,
+    d.daily_gross_sales,
+    d.days_synced
+FROM shopify_truth s
+CROSS JOIN attributed_orders a
+CROSS JOIN daily_summary d;
+```
+
+---
+
+## Summary of Recommended Changes
+
+| Issue | Current Behavior | Recommended Fix | Priority |
+|-------|------------------|-----------------|----------|
+| Revenue Comparison overcounting | Shows $298K (Any Click) | Change default to Last Click | HIGH HIGH |
+| Table name mismatch | Model uses wrong table | Update model to `shopify_daily_data` | HIGH HIGH |
+| MC ROAS/CPA redundant | Shows 4 similar metrics | Remove MC ROAS and MC CPA | MEDIUM MEDIUM |
+| Untracked orders excluded | ~5-10% orders missing | Attribute to "Direct" | MEDIUM MEDIUM |
+| L5 parameters redundant | `l5s=fb&l5m=social&l5ss=...` | Use only `l5ss` and `l5adid` | LOW LOW |
+| No reconciliation report | Users confused by differences | Add reconciliation dashboard | LOW LOW |
+
+---
+
+## Implementation Plan
+
+### Phase 1: Critical Fixes (Week 1)
+
+1. **Fix Revenue Comparison attribution default**
+   - File: `interaction_insight/views.py:8307`
+   - Change: `'Any Click'` -> `'Last Click'`
+   - Test: Verify Revenue Comparison shows ~$255K
+
+2. **Fix table name in model**
+   - File: `custom_reports/models.py:46`
+   - Change: `'shopify_daily_summary'` -> `'shopify_daily_data'`
+   - Run: `python manage.py migrate`
+
+3. **Remove MC ROAS and MC CPA**
+   - File: `sales_performance/views.py:190-192`
+   - Remove: Lines that add MC ROAS and MC CPA cards
+   - Test: Verify Executive Summary shows only MER and CAC
+
+### Phase 2: Attribution Improvements (Week 2-3)
+
+4. **Attribute untracked orders to Direct**
+   - File: `eventapp/management/commands/process_ordcredit.py:81`
+   - Add: Fallback Direct attribution logic
+   - Test: Verify 100% of orders appear in attribution
+
+5. **Add attribution model selector to Revenue Comparison**
+   - File: Frontend component
+   - Add: Dropdown to select First/Last/Any/Linear
+   - Default: Last Click
+
+### Phase 3: UTM Simplification (Week 4)
+
+6. **Simplify L5 parameters**
+   - Update: MediaAttRule configuration
+   - Remove: Dependencies on `l5s` and `l5m`
+   - Document: New parameter structure for clients
+
+7. **Create reconciliation report**
+   - New: `/revenue-reconciliation` page
+   - Shows: All revenue sources side-by-side
+   - Explains: Why numbers differ
+
+---
+
+## Testing Checklist
+
+- [ ] Revenue Comparison matches Executive Summary (±$1K)
+- [ ] Executive Summary Gross Sales matches Shopify Admin
+- [ ] All orders from Shopify appear in attribution (check untracked count = 0)
+- [ ] MC ROAS and MC CPA cards removed from dashboard
+- [ ] Simplified L5 parameters work for all ad platforms
+- [ ] Reconciliation report shows correct breakdowns
+- [ ] Performance: Queries run in < 2 seconds
+
+---
+
+## Appendix: SQL Queries for Verification
+
+### Query 1: Check for Table Mismatch
+
+```sql
+-- Check which table actually exists
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name LIKE 'shopify_daily%';
+```
+
+### Query 2: Compare All Revenue Sources
+
+```sql
+WITH qalo AS (
+    SELECT client_id FROM client
+    WHERE LOWER(client_name) LIKE '%qalo%' LIMIT 1
+)
+SELECT
+    'Orders Table (Truth)' as source,
+    COALESCE(SUM(revenue), 0) as revenue
+FROM orders, qalo
+WHERE orders.client_id = qalo.client_id
+  AND order_date BETWEEN '2026-02-19' AND '2026-02-25'
+
+UNION ALL
+
+SELECT
+    'Daily Summary Table' as source,
+    COALESCE(SUM(gross_sales), 0) as revenue
+FROM shopify_daily_data, qalo
+WHERE shopify_daily_data.client_id = qalo.client_id
+  AND event_date BETWEEN '2026-02-19' AND '2026-02-25'
+
+UNION ALL
+
+SELECT
+    'Attribution - Last Click' as source,
+    COALESCE(SUM(last_click_revenue)/100, 0) as revenue
+FROM interaction_insight_summary, qalo
+WHERE interaction_insight_summary.client_id = qalo.client_id
+  AND event_date BETWEEN '2026-02-19' AND '2026-02-25'
+
+UNION ALL
+
+SELECT
+    'Attribution - Any Click' as source,
+    COALESCE(SUM(any_click_revenue)/100, 0) as revenue
+FROM interaction_insight_summary, qalo
+WHERE interaction_insight_summary.client_id = qalo.client_id
+  AND event_date BETWEEN '2026-02-19' AND '2026-02-25';
+```
+
+### Query 3: Find Untracked Orders
+
+```sql
+-- Orders that have no attribution touchpoints
+SELECT
+    o.order_number,
+    o.order_date,
+    o.revenue,
+    'No touchpoints' as reason
+FROM orders o
+LEFT JOIN eventapp_ordercredit oc ON o.order_number = oc.tr_orderid
+WHERE o.client_id = (SELECT client_id FROM client WHERE LOWER(client_name) LIKE '%qalo%' LIMIT 1)
+  AND o.order_date BETWEEN '2026-02-19' AND '2026-02-25'
+  AND oc.tr_orderid IS NULL
+ORDER BY o.revenue DESC
+LIMIT 50;
+```
+
+### Query 4: Verify Daily Summary Completeness
+
+```sql
+-- Check if all 7 days exist in daily summary
+WITH qalo AS (
+    SELECT client_id FROM client WHERE LOWER(client_name) LIKE '%qalo%' LIMIT 1
+),
+expected_dates AS (
+    SELECT generate_series(
+        '2026-02-19'::date,
+        '2026-02-25'::date,
+        '1 day'::interval
+    )::date as date
+)
+SELECT
+    ed.date,
+    COALESCE(sd.total_orders, 0) as orders,
+    COALESCE(sd.gross_sales, 0) as gross_sales,
+    CASE WHEN sd.event_date IS NULL THEN 'NO MISSING' ELSE 'OK' END as status
+FROM expected_dates ed
+LEFT JOIN shopify_daily_data sd ON sd.event_date = ed.date
+    AND sd.client_id = (SELECT client_id FROM qalo)
+ORDER BY ed.date;
+```
+
+---
+
+**Document Version:** 1.0
+**Last Updated:** February 26, 2026
+**Author:** Mission Control Engineering Team

@@ -1,16 +1,13 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "OpenAPI Plant Store",
-    "description": "A sample API that uses a plant store as an example to demonstrate features in the OpenAPI specification",
-    "license": {
-      "name": "MIT"
-    },
+    "title": "Mission Control REST API",
+    "description": "Mission Control platform API for identity resolution, multi-touch attribution, and customer analytics",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "http://sandbox.mintlify.com"
+      "url": "https://id.lunarmc.ai"
     }
   ],
   "security": [
@@ -19,76 +16,96 @@
     }
   ],
   "paths": {
-    "/plants": {
-      "get": {
-        "description": "Returns all plants from the system that the user has access to",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "The maximum number of results to return",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
+    "/api/get_token/": {
+      "post": {
+        "summary": "Obtain JWT Token",
+        "description": "Authenticate with email and password to receive a JWT access token and refresh token",
+        "tags": ["Authentication"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User email address"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "User password"
+                  }
+                }
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
-            "description": "Plant response",
+            "description": "Authentication successful",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Plant"
+                  "type": "object",
+                  "properties": {
+                    "access": {
+                      "type": "string",
+                      "description": "JWT access token"
+                    },
+                    "refresh": {
+                      "type": "string",
+                      "description": "JWT refresh token"
+                    }
                   }
                 }
               }
             }
           },
-          "400": {
-            "description": "Unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/api/refresh_token/": {
+      "post": {
+        "summary": "Refresh JWT Token",
+        "description": "Use a refresh token to obtain a new access token",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh"],
+                "properties": {
+                  "refresh": {
+                    "type": "string",
+                    "description": "JWT refresh token"
+                  }
                 }
               }
             }
           }
-        }
-      },
-      "post": {
-        "description": "Creates a new plant in the store",
-        "requestBody": {
-          "description": "Plant to add to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
-          },
-          "required": true
         },
         "responses": {
           "200": {
-            "description": "plant response",
+            "description": "Token refreshed",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Plant"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "type": "object",
+                  "properties": {
+                    "access": {
+                      "type": "string",
+                      "description": "New JWT access token"
+                    }
+                  }
                 }
               }
             }
@@ -96,121 +113,507 @@
         }
       }
     },
-    "/plants/{id}": {
-      "delete": {
-        "description": "Deletes a single plant based on the ID supplied",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "ID of plant to delete",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
+    "/api/v1/oauth/api_key": {
+      "post": {
+        "summary": "Request API Key",
+        "description": "Request a Mission Control API key for v1 API access",
+        "tags": ["Public API (v1)"],
         "responses": {
-          "204": {
-            "description": "Plant deleted",
-            "content": {}
-          },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
+          "200": {
+            "description": "API key issued"
           }
         }
       }
-    }
-  },
-  "webhooks": {
-    "/plant/webhook": {
+    },
+    "/api/v1/eventsessions": {
+      "get": {
+        "summary": "Get Event Sessions",
+        "description": "Retrieve event sessions data for the authenticated client",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" },
+            "description": "Start date filter (YYYY-MM-DD)"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" },
+            "description": "End date filter (YYYY-MM-DD)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event sessions data"
+          }
+        }
+      }
+    },
+    "/api/v1/sourceperformance": {
+      "get": {
+        "summary": "Media Source Performance",
+        "description": "Get performance metrics broken down by media source",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source performance data"
+          }
+        }
+      }
+    },
+    "/api/v1/get_media_attribution": {
+      "get": {
+        "summary": "Get Media Attribution",
+        "description": "Retrieve media-level attribution data showing credit allocation across channels",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media attribution data"
+          }
+        }
+      }
+    },
+    "/api/v1/get_ad_attribution": {
+      "get": {
+        "summary": "Get Ad Attribution",
+        "description": "Retrieve ad-level attribution data",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ad attribution data"
+          }
+        }
+      }
+    },
+    "/api/v1/customer_360/{child_id}": {
+      "get": {
+        "summary": "Customer 360 Profile",
+        "description": "Get a comprehensive customer profile by identity ID",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "child_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Customer identity ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer 360 profile data"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      }
+    },
+    "/api/v1/channel_attribution": {
+      "get": {
+        "summary": "Channel Attribution",
+        "description": "Get attribution breakdown by marketing channel",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Channel attribution data"
+          }
+        }
+      }
+    },
+    "/api/v1/get_id_graph": {
+      "get": {
+        "summary": "Get Identity Graph",
+        "description": "Retrieve the identity graph showing linked customer identities",
+        "tags": ["Public API (v1)"],
+        "responses": {
+          "200": {
+            "description": "Identity graph data"
+          }
+        }
+      }
+    },
+    "/api/v1/customer_journey_details": {
+      "get": {
+        "summary": "Customer Journey Details",
+        "description": "Get detailed customer journey touchpoints",
+        "tags": ["Public API (v1)"],
+        "responses": {
+          "200": {
+            "description": "Customer journey data"
+          }
+        }
+      }
+    },
+    "/api/v1/known_identity_details": {
+      "get": {
+        "summary": "Known Identity Details",
+        "description": "Get details of known (identified) customer identities",
+        "tags": ["Public API (v1)"],
+        "responses": {
+          "200": {
+            "description": "Known identity details"
+          }
+        }
+      }
+    },
+    "/api/v1/conversion/details": {
+      "get": {
+        "summary": "Conversion Details",
+        "description": "Get detailed conversion/order data with attribution",
+        "tags": ["Public API (v1)"],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversion details data"
+          }
+        }
+      }
+    },
+    "/api/identity_insight/": {
+      "get": {
+        "summary": "Identity Insight Overview",
+        "description": "Get the main identity insight view",
+        "tags": ["Identity Insight"],
+        "responses": {
+          "200": {
+            "description": "Identity insight data"
+          }
+        }
+      }
+    },
+    "/api/identity_insight/customers_block": {
+      "get": {
+        "summary": "Customers Block",
+        "description": "Customer identification metrics",
+        "tags": ["Identity Insight"],
+        "responses": {
+          "200": {
+            "description": "Customer block data"
+          }
+        }
+      }
+    },
+    "/api/identity_insight/cac": {
+      "get": {
+        "summary": "Customer Acquisition Cost",
+        "description": "Calculate customer acquisition cost metrics",
+        "tags": ["Identity Insight"],
+        "responses": {
+          "200": {
+            "description": "CAC data"
+          }
+        }
+      }
+    },
+    "/api/identity_insight/ltv_cohort_summary": {
+      "get": {
+        "summary": "LTV Cohort Summary",
+        "description": "Lifetime value cohort analysis summary",
+        "tags": ["Identity Insight"],
+        "responses": {
+          "200": {
+            "description": "LTV cohort summary data"
+          }
+        }
+      }
+    },
+    "/api/customer_360/search": {
+      "get": {
+        "summary": "Search Customers",
+        "description": "Search customers by various criteria",
+        "tags": ["Customer 360"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Search query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          }
+        }
+      }
+    },
+    "/api/customer_360/user/{parent_id}": {
+      "get": {
+        "summary": "Customer Detail",
+        "description": "Get detailed customer profile by parent ID",
+        "tags": ["Customer 360"],
+        "parameters": [
+          {
+            "name": "parent_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Customer parent ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer detail data"
+          }
+        }
+      }
+    },
+    "/api/interaction_insight/channelattribution": {
+      "get": {
+        "summary": "Channel Attribution",
+        "description": "Get channel-level attribution breakdown",
+        "tags": ["Interaction Insight"],
+        "responses": {
+          "200": {
+            "description": "Channel attribution data"
+          }
+        }
+      }
+    },
+    "/api/interaction_insight/order_credit_details": {
+      "get": {
+        "summary": "Order Credit Details",
+        "description": "Get order credit attribution details",
+        "tags": ["Interaction Insight"],
+        "responses": {
+          "200": {
+            "description": "Order credit data"
+          }
+        }
+      }
+    },
+    "/api/interaction_insight/revenue_comparision": {
+      "get": {
+        "summary": "Revenue Comparison",
+        "description": "Revenue comparison dashboard data",
+        "tags": ["Interaction Insight"],
+        "responses": {
+          "200": {
+            "description": "Revenue comparison data"
+          }
+        }
+      }
+    },
+    "/api/sales_performance/dashboard": {
+      "get": {
+        "summary": "Sales Dashboard",
+        "description": "Executive summary sales dashboard data",
+        "tags": ["Sales Performance"],
+        "responses": {
+          "200": {
+            "description": "Dashboard data"
+          }
+        }
+      }
+    },
+    "/api/sales_performance/kpi-data": {
+      "get": {
+        "summary": "KPI Data",
+        "description": "Key performance indicator metrics",
+        "tags": ["Sales Performance"],
+        "responses": {
+          "200": {
+            "description": "KPI data"
+          }
+        }
+      }
+    },
+    "/api/feature_flags/features/": {
+      "get": {
+        "summary": "List Features",
+        "description": "List all available features",
+        "tags": ["Feature Flags"],
+        "responses": {
+          "200": {
+            "description": "Feature list"
+          }
+        }
+      },
       "post": {
-        "description": "Information about a new plant added to the store",
+        "summary": "Create Feature",
+        "description": "Create a new feature definition",
+        "tags": ["Feature Flags"],
         "requestBody": {
-          "description": "Plant added to the store",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewPlant"
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" }
+                }
               }
             }
           }
         },
         "responses": {
+          "201": {
+            "description": "Feature created"
+          }
+        }
+      }
+    },
+    "/api/feature_flags/": {
+      "get": {
+        "summary": "List Feature Flags",
+        "description": "List all feature flag assignments",
+        "tags": ["Feature Flags"],
+        "responses": {
           "200": {
-            "description": "Return a 200 status to indicate that the data was received successfully"
+            "description": "Feature flag list"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Feature Flag",
+        "description": "Assign a feature flag to a client",
+        "tags": ["Feature Flags"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feature": { "type": "integer" },
+                  "client_id": { "type": "integer" },
+                  "is_enabled": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Feature flag created"
+          }
+        }
+      }
+    },
+    "/api/user/register/": {
+      "post": {
+        "summary": "Register Client",
+        "description": "Register a new client account",
+        "tags": ["User Account"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" },
+                  "company": { "type": "string" },
+                  "web_url": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Client registered"
+          }
+        }
+      }
+    },
+    "/api/payments/plan_list": {
+      "get": {
+        "summary": "List Plans",
+        "description": "Get available subscription plans",
+        "tags": ["Payments"],
+        "responses": {
+          "200": {
+            "description": "Plan list"
+          }
+        }
+      }
+    },
+    "/api/payments/create_subscription": {
+      "post": {
+        "summary": "Create Subscription",
+        "description": "Create a new Stripe subscription",
+        "tags": ["Payments"],
+        "responses": {
+          "200": {
+            "description": "Subscription created"
           }
         }
       }
     }
   },
   "components": {
-    "schemas": {
-      "Plant": {
-        "required": [
-          "name"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "description": "The name of the plant",
-            "type": "string"
-          },
-          "tag": {
-            "description": "Tag to specify the type",
-            "type": "string"
-          }
-        }
-      },
-      "NewPlant": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/Plant"
-          },
-          {
-            "required": [
-              "id"
-            ],
-            "type": "object",
-            "properties": {
-              "id": {
-                "description": "Identification number of the plant",
-                "type": "integer",
-                "format": "int64"
-              }
-            }
-          }
-        ]
-      },
-      "Error": {
-        "required": [
-          "error",
-          "message"
-        ],
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token obtained from /api/get_token/"
       }
     }
   }

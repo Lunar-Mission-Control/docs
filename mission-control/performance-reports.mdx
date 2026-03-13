@@ -1,467 +1,75 @@
-# Performance Reports
-
-### DB Schema:
-
-The database for the Performance Report is designed with modularity and scalability in mind.
-
-It consists of 6 layers: 
-
-1. `Categories` : Media, Commerce, Analytics/Attribution etc
-2. `Sources` : Google Ads,  Facebook Ads, Shopify, Google Analytics, Mission Control etc
-3. `Reports` : System Defined Reports+ Custom Defined Reports
-4. `Data Dictionary(Metrics and Dimensions)` : Metrics (SYSTEM + FORMULA + USER METRIC) and Custom Dimensions.
-5. `Report Templates` : Configuration of a particular report and its metrics.
-6. `User Data` : Planning Data. User Input.
-
-The diagram below visualizes table structures, relationships, and key constraints.
-
-![Performance Reports.png](Performance%20Reports/Performance_Reports.png)
-
-## Tables Understanding:
-
-### 1. Report Data Dictionary: Source of Truth
-
-> The `report_data_dictionary`table is the **central repository** for all metrics, dimensions, and formulas used 
-in system-defined and custom reports. Every metric or dimension—whether pulled from a source, calculated via 
-formula, or manually entered—is registered here.
-> 
-
-Understanding its columns is crucial for adding new metrics, maintaining reports, or building new system-defined 
-reports.
-
-| Column Name | Data Type | Purpose / Usage |
-| --- | --- | --- |
-| **id** | int [PK] | Unique identifier for each dictionary entry |
-| **metric** | varchar(100) | Name of the metric (e.g., `CTR`, `Revenue`) |
-| **source_table** | varchar(100) | Source table name from which metric is pulled if system metric (null if 
-formula/user metric is used) |
-| **source_column** | text | Column name in source table (null if formula/user metric is used) |
-| **column_label** | varchar(100) | Human-readable name for UI display in reports |
-| **description** | text | Explanation of metric/dimension purpose |
-| **data_type** | varchar(100) | Type of data (`number`, `percent`, `currency`, `text`, `date`) |
-| **entry_type** | varchar(100) | `System` , `Formula`, `User Data`, `Custom` |
-| **client_id** | varchar(100) | Specifies which client owns this metric. Remember system defiend metrics will 
-always have client_id=0 |
-| **formula** | varchar(255) | Formula for calculated metrics (e.g., `clicks / impressions`). Instead of naming 
-it will be dictionary_ids (e.g., 2/3) |
-| **formula_label** | text | Label to display formula in UI |
-| **level** | varchar(255) | Metric belong to which level (Dimension)(`Campaign`, `AdSet`, `Ads`, `Account`, 
-`Orders`) |
-| **planning_id** | int | Links metric to planning / target data if applicable |
-| **variance** | boolean | Indicates if metric supports variance calculation |
-| **is_decimal** | boolean | True if metric should be treated as decimal for calculations/display |
-| **created_by / updated_by** | int | User IDs for audit purposes |
-| **created_at / updated_at** | datetime | Timestamp for audit/logging |
-| **is_deleted** | boolean | Soft delete flag; True means entry is inactive |
-| **is_agency** | boolean | True if metric is agency-specific |
-| **is_dimension** | boolean | True if entry is a dimension. eg./ Custom Dimensions. |
-| **attribute** | varchar(255) | A Custom dimension/metric is created on which attribute. (e.g., Meta Prospecting 
-Campaigns is made for `campaign_name`).  |
-| **agency_id** | int | For agency-level multi-tenancy |
-| **heatmap_reverse** | boolean | True for metrics where lower is better (e.g., CPA, CPM) |
-| **metric_config** | JSON | Stores additional configuration for metrics (thresholds, calculation rules, display 
-settings) |
-
-## Key Functional Columns in `report_data_dictionary`
-
-> Certain columns control how metrics are fetched, aggregated, and displayed in reports. Understanding these is 
-critical for adding new system metrics and system defined reports.
-> 
-
-1️⃣ `source_table`
-
-**Purpose:**
-
-Specifies the **database table** from which the metric is sourced.
-
-**Why it matters:**
-
-- The reporting engine uses this to locate raw data for the metric.
-- Only required for **system metrics**; ignored for fully calculated or user-defined metrics.
-
-| metric | source_table | source_column | level |
-| --- | --- | --- | --- |
-| Clicks | interaction_insight_ads_tracker | clicks | Account |
-| Total Sales | orders_new | total_sales | Orders |
-
-> ⚠️ Tip: If the metric is **formula-only**, `source_table` should be null.
-> 
-
-2️⃣ `source_column`
-
-**Purpose:**
-
-Specifies the **exact column** in `source_table` from which to pull values.
-
-**Why it matters:**
-
-- Enables dynamic query generation for reports.
-- Works together with `source_table` for accurate mapping.
-
-> ⚠️ Tip: For metrics calculated via formula across multiple columns, `source_column` may be null, as the formula 
-references multiple columns instead.
-> 
-
-> ⚠️ Tip: If the system defined column is derived i.e ROAS, CPA, CPC, CTR etc which is revenue / cost, you can 
-also mention source_colum  as `conv_value / cost`. Also remember to add formula for it which will be 2/3. This 
-will be used for footer calculation.
-> 
-
-| metric | source_table | source_column | level |
-| --- | --- | --- | --- |
-| ROAS | interaction_insight_ads_campaigntracker | conv_value / cost | Campaign |
-| Revenue | interaction_insight_ads_campaigntracker | conv_value | Campaign |
-
-3️⃣ `attribute`
-
-**Purpose:**
-
-A Custom Metric or Dimension is made on which attribute. 
-
-**Why it matters:**
-
-- Allows users to filter grouping criteria based on selected Dimension.
-
-**Example:**
-
-| metric/dimension name | attribute | is_dimension |
-| --- | --- | --- |
-| Facebook Ads Paid Media Revenue (Google Analytics) | source | FALSE |
-| Meta Prospecting Campaigns | campaign_name | TRUE |
-
-4️⃣ `level`
-
-**Purpose:**
-
-Specifies the a metric is located at which level. It can also be associated with source_table.
-
-**Why it matters:**
-
-- Determines how data is **grouped or summarized** in the report.
-- Common levels: `Campaign`, `AdSet`, `Ads`, `Account`, `Orders`, `Analytics Report` etc.
-
-**Example:**
-
-| metric | level | source_table |
-| --- | --- | --- |
-| Clicks | Account | interaction_insight_ads_tracker |
-| Clicks | Campaign | interaction_insight_ads_campaigntracker |
-| Clicks | AdSet | interaction_insight_ads_adsettracker |
-| Clicks | Ads | ads_adtracker |
-
-> ⚠️ Tip: Clicks metric is present at every paid media table such as  ads_adtracker, 
-interaction_insight_ads_campaigntracker, interaction_insight_ads_tracker, interaction_insight_ads_adsettracker so 
-level tells which is that dimension. This is used in UI filtering where user chooses a dimension and he gets all 
-metrics from that dimension.
-> 
-
-### 2. Report Custom Fields: Metric/Attribute to Source Mapping
-
-> This table contains mapping of metrics and dimensions with associated sources.
-> 
-
-**Why it matters:**
-
-- A metric can be made from a single source or from multiple sources.
-- A System defined metric will always be associated with one source.
-- A Custom Metrics can be associated with multiple sources.
-- An Attribute can be associated with single or multiple sources.
-
-**Example:**
-
-| dictionary_id | source_id | category_id |
-| --- | --- | --- |
-| 1 | 1 (Shopify) | 1 (Commerce) |
-| 2 | 2 (Google Ads) | 2 (Paid Media) |
-| 3 | 2 (Google Ads) | 2 (Paid Media) |
-| 3 | 3 (Facebook Ads) | 2 (Paid Media) |
-| 4 | 4 (TikTok Ads) | 2 (Paid Media) |
-
-## Key Insights
-
-- **Single Source of Truth:** All metrics, formulas, and dimensions originate here.
-- **Extensible:** Adding a new system metric only requires inserting a row in this table.
-- **Multi-Tenant Support:** Metrics can be client- or agency-specific (`client_id`, `agency_id`).
-- **UI & Reporting Configurable:** Column labels, formulas, and presentation flags are controlled per dictionary 
-entry.
-- **Soft Delete & Audit:** `is_deleted` plus `created/updated` timestamps ensure traceability and safe 
-maintenance.
-- **Supports Both Metrics and Dimensions:** `is_dimension` differentiates metrics from grouping dimensions.
-
-# 📘 Creating a System-Defined Report
-
-> System-defined reports are **fully configuration-driven**.
-> 
-> 
-> No backend code changes are required.
-> 
-> A new report can be created entirely by inserting records into the appropriate tables.
-> 
-
-The reporting engine dynamically:
-
-1. Reads metrics from `report_data_dictionary`
-2. Filters them by source
-3. Applies template configuration
-4. Builds SQL queries automatically
-
+---
+title: "Performance Reports Overview"
+description: "Architecture and schema overview for the Mission Control reporting engine"
+icon: "chart-line"
 ---
 
-# 🧠 Core Idea
+## Overview
 
-A system-defined report is simply:
+The Performance Report system is **fully configuration-driven** -- no backend code changes are required to create new reports. The reporting engine dynamically reads metrics, filters by source, applies templates, and builds SQL queries automatically.
 
-```
-Category → Source →Dictionary Metrics → Report →TemplateMapping
-```
+## Architecture
 
-If these mappings exist correctly, the report **automatically works**.
+The database is designed with 6 layers:
 
-# 🔧 Step-by-Step Process (Generic)
-
-## Step 1 — Create Category
-
-**Table:** `category_master`
-
-Add a logical grouping for the platform.
-
-Example:
-
-```
-Paid Media
+```mermaid
+graph LR
+    A[Categories] --> B[Sources]
+    B --> C[Data Dictionary]
+    C --> D[Reports]
+    D --> E[Report Templates]
+    E --> F[User Data]
 ```
 
----
+| Layer | Description | Example |
+|---|---|---|
+| **Categories** | Logical groupings | Media, Commerce, Analytics/Attribution |
+| **Sources** | Platforms within categories | Google Ads, Facebook Ads, Shopify, GA4 |
+| **Data Dictionary** | Metrics and dimensions | Clicks, Revenue, ROAS, CTR |
+| **Reports** | System + custom reports | LinkedIn Ads Report, Cross-Channel Report |
+| **Templates** | Column configuration per report | Which metrics appear, ordering, labels |
+| **User Data** | Planning/target data | User-entered budgets and goals |
 
-## Step 2 — Create Source
+## Key Tables
 
-**Table:** `source_master`
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="book" href="/mission-control/performance-reports-data-dictionary">
+    Central repository for all metrics, dimensions, and formulas. The source of truth.
+  </Card>
+  <Card title="Creating Reports" icon="plus" href="/mission-control/performance-reports-creating-reports">
+    Step-by-step guide to creating system-defined reports via configuration.
+  </Card>
+  <Card title="Example: LinkedIn Ads" icon="linkedin" href="/mission-control/performance-reports-example">
+    End-to-end walkthrough of building a LinkedIn Ads system report.
+  </Card>
+  <Card title="Feature Flags" icon="flag" href="/mission-control/feature-flags">
+    Control which features and modules are available per client.
+  </Card>
+</CardGroup>
 
-Add the platform under the category.
+## Table Relationships
 
-Important:
+| Table | Purpose |
+|---|---|
+| `category_master` | Logical groupings (Paid Media, Commerce, etc.) |
+| `source_master` | Platforms (Google Ads, Shopify, etc.) linked to categories |
+| `report_data_dictionary` | All metrics, dimensions, formulas -- the source of truth |
+| `report_custom_fields` | Maps metrics/dimensions to sources and categories |
+| `report_master` | Report definitions (name, type, metadata) |
+| `report_source_master` | Maps reports to their data sources |
+| `report_template_master` | Column config per report (order, labels, sticky columns) |
 
-- `client_id = 0` → indicates system/global source
+## System Report Rules
 
-Example:
+System-defined reports follow specific constraints:
 
-```
-LinkedIn Ads → category_id = Paid Media
-```
-
----
-
-## Step 3 — Add Metrics & Attribute
-
-**Table:** `report_data_dictionary`
-
-Insert:
-
-- metrics (clicks, spend, impressions, etc.)
-- dimensions (account, campaign, etc.)
-
-For each entry define:
-
-- `source_table`
-- `source_column`
-- `entry_type = SYSTEM`
-- `level`
-- `attribute`
-- configs
-
-This step defines **what data exists**.
-
----
-
-## Step 4 — Map Metrics to Source
-
-**Table:** `report_custom_fields`
-
-Create mapping:
-
-```
-dictionary_id ↔ category_id ↔ source_id
-```
-
-This step ensures:
-
-- only valid metrics appear for that source
-- safe query generation
-
----
-
-## Step 5 — Create Report
-
-**Table:** `report_master`
-
-Insert new record:
-
-- `report_name`
-- `report_type = 'System'`
-- metadata
-
-This generates a new `report_id`.
-
-This step defines **the report container**.
-
----
-
-## Step 6 — Map Report to Source
-
-**Table:** `report_source_master`
-
-Map:
-
-```
-report_id ↔ source_id
-```
-
-This step tells the engine:
-
-> which data sources feed this report
-> 
-
----
-
-## Step 7 — Configure Columns (Template)
-
-**Table:** `report_template_master`
-
-Insert rows for:
-
-- which metrics appear
-- order
-- labels
-- sticky columns
-- formulas (if overrides needed)
-
-This step defines **how the report looks in UI**.
-
----
-
-# ⚙️ Special Rule for System Reports
-
-System-defined reports:
-
-✅ Always aggregated
-
-✅ Always daily
-
-✅ No granular drill-down
-
-### Level behavior:
+- Always aggregated (no granular drill-down)
+- Always daily granularity
+- Only top-level metrics included in templates
 
 | Source Type | Level Used |
-| --- | --- |
+|---|---|
 | Paid Media | Account |
 | Shopify | null |
 | Analytics | Analytics Report |
 | Mission Control | null |
-
-So **only top-level aggregated metrics** should be added to `report_template_master`.
-
----
-
----
-
-# 📗 Example: Creating “LinkedIn Ads System Report”
-
-Let’s walk through a real scenario.
-
----
-
-## Step 1 — Identify raw tables
-
-Suppose LinkedIn data is stored in:
-
-| Table | Level |
-| --- | --- |
-| interaction_insight_ads_tracker | Account |
-| interaction_insight_ads_campaigntracker | Campaign |
-| interaction_insight_ads_adsettracker | AdSet |
-| ads_adtracker | Ads |
-
----
-
-## Step 2 — Add dictionary entries
-
-Create metrics for **each level**:
-
-Examples:
-
-| metric | source_table | source_column | level |
-| --- | --- | --- | --- |
-| impressions | interaction_insight_ads_tracker | impressions | Account |
-| clicks | interaction_insight_ads_campaigntracker | clicks | Campaign |
-| spend | ads_adtracker | cost | Ads |
-
----
-
-## Step 3 — Map dictionary ↔ source
-
-Insert all dictionary IDs into:
-
-```
-report_custom_fields
-```
-
-Now LinkedIn source only exposes LinkedIn metrics.
-
----
-
-## Step 4 — Create report
-
-Insert into:
-
-```
-report_master
-```
-
-Example:
-
-```
-report_name ="LinkedIn Ads"report_type ="System"
-```
-
-Get new `report_id`.
-
----
-
-## Step 5 — Map report ↔ source
-
-Insert:
-
-```
-report_source_master
-```
-
-```
-report_id ↔ linkedin_source_id
-```
-
----
-
-## Step 6 — Configure template (IMPORTANT)
-
-Since system reports are **aggregated**, only add:
-
-```
-level = Account
-```
-
-metrics to:
-
-```
-report_template_master
-```
-
-Do NOT add:
-
-- Campaign
-- AdSet
-- Ads
-
-Because:
-
-> Account level already contains aggregated totals.
->

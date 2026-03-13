@@ -1,0 +1,177 @@
+---
+title: "Shopify Custom Pixel Setup"
+description: "Install and configure the Mission Control L5-Tracker custom pixel in your Shopify store"
+icon: "code"
+---
+
+## Introduction
+
+Shopify Custom pixels help you collect customer events on even more pages of your online store, such as the checkout and post-purchase pages. If there isn't an app pixel available that meets your requirements, then you can use custom pixels on your store to track customer events without having to modify your theme code.
+
+Custom pixels are loaded in a Lax sandbox, designed for improved security and control over the data that you send to third parties.
+
+<Warning>
+Not all pixel functionality works in the sandbox. You might need to consult your third-party service provider for help.
+</Warning>
+
+## Manage Custom Pixels
+
+You can manage your custom pixels in the **Customer events** section of your Shopify admin.
+
+### Add a Custom Pixel
+
+Before adding a custom pixel, make sure to remove or modify any existing pixels to prevent duplicate counting of customer events. Existing pixel/tag code should be manually removed from any place if it exists, such as:
+
+- `theme.liquid`
+- `checkout.liquid` (Plus merchants only)
+- **Additional scripts** in your checkout settings
+
+<Steps>
+  <Step title="Navigate to Customer Events">
+    From your Shopify admin, go to **Settings > Customer events**.
+  </Step>
+  <Step title="Add Custom Pixel">
+    Click the **Add custom pixel** button to open the event editor.
+  </Step>
+  <Step title="Name Your Pixel">
+    In the **Add custom pixel** popup, enter the pixel name `L5-Tracker` and click **Add pixel**.
+
+    <Note>
+    Each pixel name must be unique. If a custom pixel with that name already exists, you'll be prompted to use a different name.
+    </Note>
+  </Step>
+  <Step title="Add the Pixel Code">
+    Once the custom pixel is created, you'll see a code editor window. Paste the following L5 Tracker code, or copy it from your [Tag Management settings](https://app.lunarmc.ai/settings/tag-management) under **Shopify Web Pixel**.
+
+    ```javascript
+    /* Start : L5 Tracker Code */
+    const l5AdditionalCookies = o => {
+      const e = [];
+      if (o.length === 0) return e;
+      o.forEach(o => {
+        const n = document.cookie.match(new RegExp(`${o}=([^;]*)`));
+        if (n) {
+          const c = decodeURIComponent(n[1]);
+          e.push({ name: o, value: c });
+        }
+      });
+      return e;
+    };
+
+    !(function(p, l, o, w, i, n, g) {
+      if (!p[i]) {
+        p.GlobalSnowplowNamespace = p.GlobalSnowplowNamespace || [];
+        p.GlobalSnowplowNamespace.push(i);
+        p[i] = function() {
+          (p[i].q = p[i].q || []).push(arguments);
+        };
+        p[i].q = p[i].q || [];
+        n = l.createElement(o);
+        g = l.getElementsByTagName(o)[0];
+        n.async = 1;
+        n.src = w;
+        g.parentNode.insertBefore(n, g);
+      }
+    })(window, document, "script", "https://js.l5id.com/l5v3.js", "l5plow");
+
+    window.l5plow('newTracker', 'ssc', 'id.layerfive.com', {
+      appId: 'CLIENT_ID',        // Replace with your Client ID (provided by Mission Control)
+      sessionCookieTimeout: 0,
+      cookieDomain: 'DOMAIN',    // Replace with your domain (e.g. .myshopify.com)
+    });
+
+    // Subscribe to customer events
+    analytics.subscribe("page_viewed", async (event) => {
+      window.l5plow('trackPageView', document.title, [{
+        schema: "iglu:com.layerfive/page_view_custom/jsonschema/1-0-0",
+        data: {
+          additionalCookies: l5AdditionalCookies(['_fbp', '_fpc'])
+        }
+      }]);
+    });
+
+    analytics.subscribe("product_added_to_cart", async (event) => {
+      var cartData = {
+        "sku": event.data.cartLine.merchandise.id,
+        "name": event.data.cartLine.merchandise.product.title,
+        "category": event.data.cartLine.merchandise.product.type,
+        "unitPrice": event.data.cartLine.merchandise.price.amount,
+        "quantity": event.data.cartLine.quantity,
+        "currency": event.data.cartLine.merchandise.price.currencyCode
+      };
+      window.l5plow("trackAddToCart", cartData);
+    });
+
+    analytics.subscribe("product_removed_from_cart", async (event) => {
+      var cartData = {
+        "sku": event.data.cartLine.merchandise.id,
+        "name": event.data.cartLine.merchandise.product.title,
+        "category": event.data.cartLine.merchandise.product.type,
+        "unitPrice": event.data.cartLine.merchandise.price.amount,
+        "quantity": event.data.cartLine.quantity,
+        "currency": event.data.cartLine.merchandise.price.currencyCode
+      };
+      window.l5plow("trackRemoveFromCart", cartData);
+    });
+
+    analytics.subscribe("checkout_completed", async (event) => {
+      var orderData = {
+        "orderId": event.data.checkout.order.id,
+        "affiliation": "110",
+        "total": event.data.checkout.totalPrice.amount,
+        "tax": event.data.checkout.totalTax.amount,
+        "shipping": event.data.checkout.shippingLine.price.amount,
+        "city": event.data.checkout.billingAddress.city,
+        "state": event.data.checkout.billingAddress.province,
+        "country": event.data.checkout.billingAddress.country,
+        "currency": event.data.checkout.totalPrice.currencyCode,
+      };
+      window.l5plow('addTrans', orderData);
+      window.l5plow('setUserId', event.data.checkout.order.customer.id);
+      window.l5plow('trackTrans');
+    });
+    /* End : L5 Tracker Code */
+    ```
+  </Step>
+  <Step title="Configure Your Client ID and Domain">
+    In the code above, replace the two placeholder values:
+
+    | Placeholder | Replace With | Example |
+    |---|---|---|
+    | `CLIENT_ID` | Your Client ID provided by the Mission Control support team | `abc123` |
+    | `DOMAIN` | Your website domain (without `http://` or `https://`, prefixed with `.`) | `.example.com` |
+
+    <Info>
+    If your website domain is `https://example.com/`, set the domain to `.example.com`.
+    </Info>
+  </Step>
+  <Step title="Save the Pixel">
+    Click the **Save** button to save your custom pixel.
+  </Step>
+</Steps>
+
+### Connect a Custom Pixel
+
+After a custom pixel has been added, you need to connect it so it can start tracking customer events.
+
+<Steps>
+  <Step title="Navigate to Custom Pixels">
+    From the **Customer events** page in your Shopify admin, click **Custom pixels**.
+  </Step>
+  <Step title="Connect the Pixel">
+    Custom pixels that aren't currently connected are displayed under **Disconnected pixels**. Click the `...` menu on the L5-Tracker pixel line and select **Connect**.
+  </Step>
+</Steps>
+
+The pixel status will update from **Disconnected** to **Connected** and will begin tracking customer events.
+
+## Tracked Events
+
+The L5-Tracker pixel subscribes to the following Shopify customer events:
+
+| Event | Description | Data Captured |
+|---|---|---|
+| `page_viewed` | User views any page | Page title, additional cookies (`_fbp`, `_fpc`) |
+| `product_added_to_cart` | User adds product to cart | SKU, product name, category, price, quantity, currency |
+| `product_removed_from_cart` | User removes product from cart | SKU, product name, category, price, quantity, currency |
+| `checkout_completed` | User completes checkout | Order ID, total, tax, shipping, billing address, currency, customer ID |

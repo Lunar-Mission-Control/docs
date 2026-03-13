@@ -1,33 +1,434 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API Reference"
+description: "Mission Control REST API documentation"
+icon: "terminal"
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Overview
 
-## Welcome
+The Mission Control REST API provides programmatic access to identity resolution, attribution data, customer analytics, and platform management. The API is organized into modules covering the full platform functionality.
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
-
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+**Base URL:** `https://id.lunarmc.ai/api/`
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+All API endpoints require JWT Bearer token authentication. Obtain a token using the `/api/get_token/` endpoint and refresh it with `/api/refresh_token/`.
 
-```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+```bash
+# Get a token
+curl -X POST https://id.lunarmc.ai/api/get_token/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "your_password"}'
+
+# Use the token
+curl https://id.lunarmc.ai/api/v1/eventsessions \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Refresh the token
+curl -X POST https://id.lunarmc.ai/api/refresh_token/ \
+  -H "Content-Type: application/json" \
+  -d '{"refresh": "YOUR_REFRESH_TOKEN"}'
 ```
+
+## Public API (v1)
+
+The v1 API provides external access for integrations and requires an API key.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/oauth/api_key` | Request a Mission Control API key |
+| `GET` | `/api/v1/eventsessions` | Retrieve event sessions data |
+| `GET` | `/api/v1/sourceperformance` | Media source performance metrics |
+| `GET` | `/api/v1/get_media_attribution` | Media attribution data |
+| `GET` | `/api/v1/get_ad_attribution` | Ad-level attribution data |
+| `GET` | `/api/v1/customer_360/{child_id}` | Customer 360 profile by ID |
+| `GET` | `/api/v1/channel_attribution` | Channel attribution breakdown |
+| `GET` | `/api/v1/get_id_graph` | Identity graph data |
+| `GET` | `/api/v1/customer_journey_details` | Customer journey details |
+| `GET` | `/api/v1/known_identity_details` | Known identity details |
+| `GET` | `/api/v1/conversion/details` | Conversion details |
+
+## API Modules
+
+<AccordionGroup>
+  <Accordion title="Identity Insight" icon="fingerprint">
+    Customer identification and identity resolution analytics.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/identity_insight/` | Main identity insight view |
+    | `GET` | `/api/identity_insight/customers_block` | Customer identification metrics |
+    | `GET` | `/api/identity_insight/cookies_block` | Cookie tracking metrics |
+    | `GET` | `/api/identity_insight/trend_block` | Identification trend data |
+    | `GET` | `/api/identity_insight/prospect_block` | Prospect identification data |
+    | `GET` | `/api/identity_insight/summary_data` | Summary statistics |
+    | `GET` | `/api/identity_insight/visits_analytics` | Visit analytics |
+    | `GET` | `/api/identity_insight/cac` | Customer acquisition cost |
+    | `GET` | `/api/identity_insight/ltv_cohort_summary` | LTV cohort summary |
+    | `GET` | `/api/identity_insight/ltv_data_cards_cohort` | LTV cohort data cards |
+    | `GET` | `/api/identity_insight/view_companies_name` | Company name lookup |
+  </Accordion>
+
+  <Accordion title="Customer 360" icon="user-circle">
+    Comprehensive customer profiles and analytics.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/customer_360/search` | Search customers |
+    | `GET` | `/api/customer_360/user/{parent_id}` | Customer detail view |
+    | `GET` | `/api/customer_360/filters/` | Available search filters |
+    | `GET` | `/api/customer_360/analytics` | Customer analytics |
+    | `GET` | `/api/customer_360/cltv_trend` | Customer lifetime value trend |
+    | `GET` | `/api/customer_360/conversion_by_mediasource` | Conversions by media source |
+    | `GET` | `/api/customer_360/conversion_details` | Conversion details |
+    | `GET` | `/api/customer_360/products_visited_through_ads` | Products visited via ads |
+    | `GET` | `/api/customer_360/loyalcustomers_list` | Loyal customers |
+    | `GET` | `/api/customer_360/newvisitornotconverted_list` | New visitors not converted |
+    | `GET` | `/api/customer_360/knownvisitornotconverted_list` | Known visitors not converted |
+    | `GET` | `/api/customer_360/customerreadytopurchase_list` | Customers ready to purchase |
+    | `GET` | `/api/customer_360/ranked_page_visits` | Ranked page visits |
+    | `GET` | `/api/customer_360/visits_by_city` | Visits by city |
+    | `GET` | `/api/customer_360/visits_by_country` | Visits by country |
+    | `GET` | `/api/customer_360/visits_by_state` | Visits by state |
+    | `GET` | `/api/customer_360/count_fbp_cookies` | Facebook pixel cookie count |
+    | `GET` | `/api/customer_360/custom_audiences_list` | Custom audience segments |
+    | `POST` | `/api/customer_360/send_cookies_audience` | Send cookie audience data |
+    | `POST` | `/api/customer_360/export_cookies` | Export cookies for audience |
+    | `GET` | `/api/customer_360/journey-insight` | Journey insight data |
+    | `GET` | `/api/customer_360/media_source_overlap_report` | Media source overlap |
+  </Accordion>
+
+  <Accordion title="Interaction Insight" icon="chart-bar">
+    Attribution, order credit, and channel performance analytics.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/interaction_insight/channelattribution` | Channel attribution breakdown |
+    | `GET` | `/api/interaction_insight/order_credit_details` | Order credit details |
+    | `GET` | `/api/interaction_insight/performance_media_credit_details` | Performance media credits |
+    | `GET` | `/api/interaction_insight/order_ad_campaign_details` | Order ad campaign details |
+    | `GET` | `/api/interaction_insight/conversion_by_sources_details` | Conversions by source |
+    | `GET` | `/api/interaction_insight/order_count_details` | Order count details |
+    | `GET` | `/api/interaction_insight/days_to_conv` | Days to conversion |
+    | `GET` | `/api/interaction_insight/orders_by_sources` | Orders by media source |
+    | `GET` | `/api/interaction_insight/orders_coverage/details` | Order coverage details |
+    | `GET` | `/api/interaction_insight/viewthroughattribution` | View-through attribution |
+    | `GET` | `/api/interaction_insight/page_views_visits` | Page views and visits |
+    | `GET` | `/api/interaction_insight/cohort_analysis` | Cohort analysis |
+    | `GET` | `/api/interaction_insight/conversion_tracking` | Conversion tracking |
+    | `GET` | `/api/interaction_insight/revenue_comparision` | Revenue comparison dashboard |
+    | `GET` | `/api/interaction_insight/orderdetailschanneldata` | Order details by channel |
+    | `GET` | `/api/interaction_insight/orderdetailscampaigndata` | Order details by campaign |
+    | `GET` | `/api/interaction_insight/orderdetailsadsdata` | Order details by ad |
+    | `GET` | `/api/interaction_insight/keyword_attributiondata` | Keyword attribution |
+    | `GET` | `/api/interaction_insight/popular_products` | Most popular products |
+    | `GET` | `/api/interaction_insight/googleadsmetrics` | Google Ads metrics |
+    | `GET` | `/api/interaction_insight/facebookadsmetrics` | Facebook Ads metrics |
+    | `GET` | `/api/interaction_insight/ads_insight_view` | Ad insight overview |
+    | `GET` | `/api/interaction_insight/revenue_adspend_data` | Revenue vs ad spend |
+    | `GET` | `/api/interaction_insight/kpi_customer_data` | KPI customer data |
+    | `GET` | `/api/interaction_insight/order_sorting_tool` | Order sorting tool |
+    | `GET` | `/api/interaction_insight/get_media_sources` | Available media sources |
+    | `GET` | `/api/interaction_insight/get_coupon_codes` | Coupon codes |
+  </Accordion>
+
+  <Accordion title="Sales Performance" icon="chart-line">
+    Executive summary, KPIs, and sales dashboards.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/sales_performance/dashboard` | Sales dashboard |
+    | `GET` | `/api/sales_performance/ads-dashboard` | Ads performance dashboard |
+    | `GET` | `/api/sales_performance/ads-dashboard-graph` | Ads dashboard charts |
+    | `GET` | `/api/sales_performance/ads-dashboard-attributes` | Ads dashboard attributes |
+    | `GET` | `/api/sales_performance/numberofvisitors` | Visitor count |
+    | `GET` | `/api/sales_performance/aov` | Average order value |
+    | `GET` | `/api/sales_performance/ads_performance` | Ads performance data |
+    | `GET` | `/api/sales_performance/rev-adspend-data` | Revenue vs ad spend |
+    | `GET` | `/api/sales_performance/kpi-data` | KPI metrics |
+    | `GET` | `/api/sales_performance/ga4-dashboard` | GA4 dashboard |
+    | `GET` | `/api/sales_performance/ga4-analytics-data` | GA4 analytics |
+    | `GET` | `/api/sales_performance/available-custom-metrics` | Available custom metrics |
+    | `GET/POST` | `/api/sales_performance/custom-cards` | Custom dashboard cards |
+    | `POST` | `/api/sales_performance/custom-cards/reorder` | Reorder custom cards |
+    | `GET` | `/api/sales_performance/default-cards` | Default card definitions |
+    | `POST` | `/api/sales_performance/save-card-configuration` | Save card configuration |
+    | `GET` | `/api/sales_performance/bought-together` | Frequently bought together |
+    | `GET` | `/api/sales_performance/product-journey` | Product journey analysis |
+    | `GET` | `/api/sales_performance/customer-cohort` | Customer cohort analysis |
+    | `GET` | `/api/sales_performance/sales-forecast` | Sales forecast |
+    | `GET` | `/api/sales_performance/orders-forecast` | Orders forecast |
+    | `GET` | `/api/sales_performance/ads-recommender` | Ads recommendations |
+  </Accordion>
+
+  <Accordion title="Marketing Performance" icon="bullhorn">
+    Campaign and marketing analytics.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/marketing_performance/dashboard` | Marketing dashboard |
+    | `GET` | `/api/marketing_performance/campaign-performance` | Campaign performance |
+    | `GET` | `/api/marketing_performance/campaign-performance-details` | Campaign detail view |
+    | `GET` | `/api/marketing_performance/campaign-performance-matrix` | Campaign matrix |
+  </Accordion>
+
+  <Accordion title="Channel Performance" icon="chart-pie">
+    Ad platform channel analytics and GA4 data.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/channel_performance/list_accounts` | List connected accounts |
+    | `GET` | `/api/channel_performance/campaigns` | Campaign list |
+    | `GET` | `/api/channel_performance/summary_metrics` | Summary metrics |
+    | `GET` | `/api/channel_performance/key_kpis` | Key KPIs |
+    | `GET` | `/api/channel_performance/performance_by_day` | Daily performance |
+    | `GET` | `/api/channel_performance/campaign_performance` | Campaign performance |
+    | `GET` | `/api/channel_performance/ga4/campaigns` | GA4 campaigns |
+    | `GET` | `/api/channel_performance/ga4/summary_metrics` | GA4 summary metrics |
+    | `GET` | `/api/channel_performance/ga4/key_kpis` | GA4 key KPIs |
+    | `GET` | `/api/channel_performance/ga4/top_traffic_sources` | GA4 top traffic sources |
+    | `GET` | `/api/channel_performance/ga4/top_events` | GA4 top events |
+    | `GET` | `/api/channel_performance/ga4/top_landing_pages` | GA4 top landing pages |
+    | `GET` | `/api/channel_performance/ga4/traffic_source_trends` | GA4 traffic source trends |
+  </Accordion>
+
+  <Accordion title="Summary Insight" icon="gauge">
+    High-level dashboard metrics and visitor analytics.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/summary_insight/details` | Summary details |
+    | `GET` | `/api/summary_insight/drill_visits` | Drill-down visit details |
+    | `GET` | `/api/summary_insight/drill_orders` | Drill-down order details |
+    | `GET` | `/api/summary_insight/visitor_devices` | Visitor device breakdown |
+    | `GET` | `/api/summary_insight/new_visitor_notconvert` | New unconverted visitors |
+    | `GET` | `/api/summary_insight/known_visitor_notconvert` | Known unconverted visitors |
+    | `GET` | `/api/summary_insight/customer_readytopurchase` | Customers ready to buy |
+    | `GET` | `/api/summary_insight/customervisitors_summary` | Customer/visitor summary |
+    | `GET` | `/api/summary_insight/loyal_customers` | Loyal customer list |
+    | `GET` | `/api/summary_insight/visitors_interest` | Visitor product interest |
+    | `GET` | `/api/summary_insight/perc_visits_loc` | Visits by location |
+    | `GET` | `/api/summary_insight/perc_visits_hourly` | Visits by hour |
+    | `GET` | `/api/summary_insight/organic_traffic` | Organic traffic data |
+    | `GET` | `/api/summary_insight/curr_cpa` | Current CPA |
+    | `GET` | `/api/summary_insight/curr_roa` | Current ROA |
+    | `GET` | `/api/summary_insight/customers_life_time` | Customer lifetime metrics |
+    | `GET` | `/api/summary_insight/sessions_by_os` | Sessions by OS |
+    | `GET` | `/api/summary_insight/sessions_by_device` | Sessions by device type |
+    | `GET` | `/api/summary_insight/avg_reorder_days` | Average reorder days |
+  </Accordion>
+
+  <Accordion title="Segmentation" icon="filter">
+    Audience segmentation and targeting.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/segmentation/metadata` | Segmentation metadata |
+    | `GET` | `/api/segmentation/formtype-metadata` | Form type metadata |
+    | `POST` | `/api/segmentation/createupdate` | Create/update segment |
+    | `GET` | `/api/segmentation/list` | List segments |
+    | `POST` | `/api/segmentation/delete` | Delete segment |
+    | `POST` | `/api/segmentation/parse` | Parse segmentation data |
+    | `GET` | `/api/segmentation/detail` | Segment detail |
+    | `POST` | `/api/segmentation/count` | Segment count |
+    | `GET` | `/api/segmentation/list_audience_segments` | List audience segments |
+    | `GET` | `/api/segmentation/abandoned_cart/metrics` | Abandoned cart metrics |
+  </Accordion>
+
+  <Accordion title="Customer Insight" icon="users">
+    Customer segmentation funnels and analysis.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/customer_insight/get_all_media_sources` | All media sources |
+    | `GET` | `/api/customer_insight/funnel` | Funnel data |
+    | `GET` | `/api/customer_insight/get-customer-segmentation` | Customer segmentation |
+    | `GET` | `/api/customer_insight/get-customer-segmentation-list` | Segmentation list |
+    | `GET` | `/api/customer_insight/get-customer-segmentation-funnel-summary` | Funnel summary |
+  </Accordion>
+
+  <Accordion title="Integration" icon="plug">
+    OAuth connections and third-party integrations.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/integration/oauth_redirect_url` | Get OAuth redirect URL |
+    | `GET/POST` | `/api/integration/oauth/google` | Google Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/facebook` | Facebook Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/bing` | Bing Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/snapchat` | Snapchat Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/linkedin` | LinkedIn Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/pinterest` | Pinterest Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/tiktok` | TikTok Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/reddit` | Reddit Ads OAuth |
+    | `GET/POST` | `/api/integration/oauth/shopify` | Shopify OAuth |
+    | `GET/POST` | `/api/integration/oauth/hubspot` | HubSpot OAuth |
+    | `GET/POST` | `/api/integration/oauth/salesforce` | Salesforce OAuth |
+    | `GET/POST` | `/api/integration/oauth/google_ga4` | Google Analytics 4 OAuth |
+    | `GET/POST` | `/api/integration/oauth/google_sheets` | Google Sheets OAuth |
+    | `GET/POST` | `/api/integration/oauth/typeform` | Typeform OAuth |
+    | `GET/POST` | `/api/integration/integration_config` | Integration configuration |
+    | `GET` | `/api/integration/source_lists` | Source master list |
+    | `POST` | `/api/integration/create_source` | Create/upsert source |
+    | `POST` | `/api/integration/save_credentials` | Save integration credentials |
+  </Accordion>
+
+  <Accordion title="User Account" icon="user-gear">
+    User registration, authentication, and account management.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `POST` | `/api/get_token/` | Obtain JWT access token |
+    | `POST` | `/api/refresh_token/` | Refresh JWT token |
+    | `POST` | `/api/user/register/` | Register new client |
+    | `POST` | `/api/user/registeruser/` | Register new user |
+    | `GET` | `/api/user/view/details/` | Current user details |
+    | `PUT` | `/api/user/change/password/` | Change password |
+    | `POST` | `/api/user/reset_password` | Request password reset |
+    | `POST` | `/api/user/reset_password/confirm` | Confirm password reset |
+    | `GET/POST` | `/api/user/systemconf` | System configuration |
+    | `POST` | `/api/user/tag_management` | Tag management settings |
+    | `GET` | `/api/user/get_modules_data` | Available modules |
+    | `GET` | `/api/user/check_all_integrations_status` | Integration status check |
+    | `GET` | `/api/user/get_user_screens` | User screen permissions |
+    | `GET/POST` | `/api/user/dynamic_column_config` | Dynamic column configuration |
+  </Accordion>
+
+  <Accordion title="Custom Reports" icon="file-chart-column">
+    Custom report builder and saved reports.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/custom_reports/view_report` | View a report |
+    | `GET` | `/api/custom_reports/user_data` | User report data |
+    | `GET` | `/api/custom_reports/source` | Source report data |
+    | `GET` | `/api/custom_reports/metrics` | Available metrics |
+    | `POST` | `/api/custom_reports/create_update_report` | Create/update report |
+    | `DELETE` | `/api/custom_reports/delete_report` | Delete report |
+    | `GET` | `/api/custom_reports/dimension` | Available dimensions |
+    | `GET/POST` | `/api/custom_reports/custom_fields` | Custom fields |
+    | `GET` | `/api/custom_reports/group_by_time` | Time grouping options |
+  </Accordion>
+
+  <Accordion title="Custom Dashboards" icon="gauge-high">
+    Dashboard builder with charts and insights.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET/POST` | `/api/custom_dashboards/dashboard` | Dashboard CRUD |
+    | `GET` | `/api/custom_dashboards/chart_data` | Chart data |
+    | `GET` | `/api/custom_dashboards/metrics_data` | Metrics data |
+    | `GET` | `/api/custom_dashboards/all_metrics` | All available metrics |
+    | `POST` | `/api/custom_dashboards/create_charts` | Create charts |
+    | `POST` | `/api/custom_dashboards/publish_dashboard` | Publish dashboard |
+    | `POST` | `/api/custom_dashboards/generate_dashboard_insights` | Generate AI insights |
+    | `POST` | `/api/custom_dashboards/share_dashboard` | Share dashboard |
+  </Accordion>
+
+  <Accordion title="Payments" icon="credit-card">
+    Stripe subscription and billing management.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `POST` | `/api/payments/create_subscription` | Create subscription |
+    | `GET` | `/api/payments/plan_list` | Available plans |
+    | `GET` | `/api/payments/current_plan` | Current plan |
+    | `PUT` | `/api/payments/update_subscription` | Update subscription |
+    | `GET` | `/api/payments/customer_payment_method` | Payment method details |
+    | `GET` | `/api/payments/invoice_details` | Invoice history |
+    | `POST` | `/api/payments/setup_intent` | Stripe setup intent |
+    | `POST` | `/api/payments/save_card` | Save payment card |
+    | `GET` | `/api/payments/visitors_count` | Visitor count for billing |
+  </Accordion>
+
+  <Accordion title="Feature Flags" icon="flag">
+    Feature flag management for clients.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET/POST` | `/api/feature_flags/features/` | List/create features |
+    | `GET/PUT/DELETE` | `/api/feature_flags/features/{pk}/` | Feature detail/update/delete |
+    | `GET/POST` | `/api/feature_flags/` | List/create feature flags |
+    | `GET/PUT/DELETE` | `/api/feature_flags/{pk}/` | Flag detail/update/delete |
+  </Accordion>
+
+  <Accordion title="Privacy Insight" icon="shield-halved">
+    Privacy compliance and data management.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/privacy_insight/details` | Privacy insight overview |
+    | `GET` | `/api/privacy_insight/data_access/customer/{customer_id}` | Customer data access |
+    | `GET` | `/api/privacy_insight/data_download/customer/{customer_id}` | Download customer data |
+    | `POST` | `/api/privacy_insight/ticket/create` | Create privacy ticket |
+    | `POST` | `/api/privacy_insight/data_delete/customer/{customer_id}` | Delete customer data |
+  </Accordion>
+
+  <Accordion title="Monitoring" icon="bell">
+    Data anomaly detection and alerts.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/monitoring/data-anomaly` | Daily data anomalies |
+    | `GET` | `/api/monitoring/top-banner` | Top banner alerts |
+    | `POST` | `/api/monitoring/update-anomaly-tag` | Update anomaly tags |
+    | `GET` | `/api/monitoring/high-value-customers` | High value customer alerts |
+  </Accordion>
+
+  <Accordion title="Chatbot" icon="message-bot">
+    AI-powered analytics chatbot.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `POST` | `/api/l5chatbot/chat-query` | Submit a chat query |
+  </Accordion>
+
+  <Accordion title="Notes" icon="note-sticky">
+    Annotation and note management.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/notes/list` | List notes |
+    | `POST` | `/api/notes/create_note` | Create note |
+    | `PUT` | `/api/notes/update_note` | Update note |
+    | `DELETE` | `/api/notes/delete` | Delete note |
+    | `GET` | `/api/notes/get_trend_data_by_notes` | Trend data for notes |
+    | `GET` | `/api/notes/revision_history` | Note revision history |
+  </Accordion>
+
+  <Accordion title="Marketing Resources" icon="rectangle-ad">
+    Campaign, creative, and ad management.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET/POST` | `/api/marketing_resources/campaigns/` | Campaign CRUD |
+    | `GET/POST` | `/api/marketing_resources/creatives/` | Creative CRUD |
+    | `GET/POST` | `/api/marketing_resources/ads/` | Ad CRUD |
+    | `GET` | `/api/marketing_resources/ads/reporting/` | Ad performance reporting |
+    | `GET` | `/api/marketing_resources/creatives/reporting/top_performing/` | Top performing creatives |
+    | `GET/POST` | `/api/marketing_resources/folders/` | Report folders |
+    | `GET/POST` | `/api/marketing_resources/reports/` | Saved reports |
+  </Accordion>
+
+  <Accordion title="Job Queue" icon="clock-rotate-left">
+    Background job management for integrations.
+
+    | Method | Endpoint | Description |
+    |---|---|---|
+    | `GET` | `/api/job-queue/status/` | Job queue status |
+    | `POST` | `/api/job-queue/trigger/` | Trigger integration job |
+    | `GET` | `/api/job-queue/details/{job_id}/` | Job details |
+    | `POST` | `/api/job-queue/smart_run/` | Smart bulk run |
+  </Accordion>
+</AccordionGroup>
+
+## Webhooks
+
+Mission Control receives webhooks from connected platforms:
+
+| Platform | Endpoint | Description |
+|---|---|---|
+| Shopify | `/api/integration/shopify/{client_id}/customer` | Customer data webhook |
+| Shopify | `/api/integration/shopify/{client_id}/app_uninstall` | App uninstall webhook |
+| WooCommerce | `/api/integration/{client_id}/woocommerce_webhook` | WooCommerce events |
+| Stripe | `/api/payments/stripe_subscription_created` | Subscription events |
