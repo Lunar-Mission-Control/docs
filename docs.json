@@ -52,7 +52,10 @@
           {
             "group": "Development",
             "pages": [
-              "mission-control/ai-development"
+              "mission-control/ai-development",
+              "mission-control/ai-best-practices",
+              "mission-control/ai-workflow",
+              "mission-control/ai-prompts"
             ]
           },
           {

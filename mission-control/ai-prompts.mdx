@@ -1,0 +1,542 @@
+# AI Prompt Templates
+
+This document contains reusable prompt templates for common development tasks in the LayerFive project.
+
+## Table of Contents
+1. [Backend Development](#backend-development)
+2. [Frontend Development](#frontend-development)
+3. [Testing](#testing)
+4. [Debugging](#debugging)
+5. [Code Review](#code-review)
+6. [Documentation](#documentation)
+
+## Backend Development
+
+### Create Django Model
+```
+Create a Django model in layerfivecore/[APP_NAME]/models.py for [FEATURE_NAME]:
+
+Requirements:
+- Model name: [MODEL_NAME]
+- Fields:
+  - [field_name]: [field_type] ([requirements])
+  - [field_name]: [field_type] ([requirements])
+- Add appropriate Meta class with:
+  - ordering
+  - constraints (if needed)
+  - indexes on [fields]
+- Implement __str__ method
+- Add validation in clean() method
+- Use type hints
+
+Follow Django best practices and LayerFive conventions.
+```
+
+### Create API Endpoint
+```
+Create a REST API endpoint in layerfivecore/[APP_NAME]/:
+
+Endpoint: [METHOD] /api/[path]/
+Purpose: [description]
+
+Requirements:
+- ViewSet in views.py with [list/create/retrieve/update/delete]
+- Serializer in serializers.py with validation for:
+  - [field]: [validation rules]
+- Permissions: [permission_classes]
+- Pagination: [page_size]
+- Queryset optimization with select_related/prefetch_related
+- Error handling for:
+  - Invalid input (400)
+  - Unauthorized (401)
+  - Not found (404)
+  - Server errors (500)
+- Logging at appropriate levels
+
+Include comprehensive tests.
+```
+
+### Create Django Service
+```
+Create a service class in layerfivecore/[APP_NAME]/services.py:
+
+Service: [ServiceName]
+Purpose: [description]
+
+Methods needed:
+- [method_name]([parameters]): [purpose]
+  - Should handle [specific scenarios]
+  - Returns: [return_type]
+  - Raises: [exceptions]
+
+Requirements:
+- Proper error handling
+- Type hints
+- Docstrings for all public methods
+- Transaction handling where appropriate
+- Logging
+- Unit tests with mocked dependencies
+```
+
+### Database Migration
+```
+I need to modify the [MODEL_NAME] model in layerfivecore/[APP_NAME]/:
+
+Changes:
+- [describe changes]
+
+Questions:
+1. What migration strategy should I use?
+2. Do I need a data migration?
+3. How to handle existing data?
+4. What's the rollback strategy?
+5. Show me the migration commands
+
+Considerations:
+- Production database has [X] records
+- Zero-downtime deployment required
+```
+
+### External API Integration
+```
+Integrate [THIRD_PARTY_API] in layerfivecore/integration/:
+
+Requirements:
+- Authentication: [auth_method]
+- Endpoints to integrate:
+  - [endpoint]: [purpose]
+- Create service class: [ServiceName]
+- Error handling:
+  - Rate limiting
+  - Network failures (retry logic)
+  - Invalid responses
+  - Timeout handling
+- Response caching: [cache_strategy]
+- Logging
+- Configuration via environment variables
+- Unit tests with mocked API responses
+
+Follow LayerFive integration patterns.
+```
+
+## Frontend Development
+
+### Create Angular Component
+```
+Create an Angular component in l5ui/src/app/[path]/:
+
+Component: [ComponentName]
+Purpose: [description]
+
+Requirements:
+- Template includes:
+  - [UI elements]
+- Functionality:
+  - [behaviors]
+- Data from API: [endpoint]
+- Use Angular Material components
+- OnPush change detection
+- Proper unsubscribe in OnDestroy
+- Loading and error states
+- Responsive design
+- Unit tests
+
+Follow Angular and LayerFive conventions.
+```
+
+### Create Angular Service
+```
+Create an Angular service in l5ui/src/app/services/:
+
+Service: [ServiceName]
+Purpose: [description]
+
+Methods:
+- [methodName]([params]): Observable<[Type]>
+  - API endpoint: [endpoint]
+  - Request: [request_format]
+  - Response: [response_format]
+
+Requirements:
+- HttpClient for API calls
+- Error handling with catchError
+- RxJS operators for data transformation
+- Type safety with interfaces
+- Environment-based API URL
+- Unit tests with HttpClientTestingModule
+```
+
+### Create Form
+```
+Create a reactive form in l5ui/src/app/[component]/:
+
+Form purpose: [description]
+
+Fields:
+- [field_name]: [type] - [validation_rules]
+- [field_name]: [type] - [validation_rules]
+
+Requirements:
+- Use Angular FormBuilder
+- Validators for all fields
+- Custom validators for: [specific_validation]
+- Display validation errors
+- Submit to API: POST [endpoint]
+- Loading state during submission
+- Success/error messages
+- Material form components
+- Unit tests for validation and submission
+```
+
+### Add Route
+```
+Add a new route to l5ui/src/app/app-routing.module.ts:
+
+Route: [path]
+Component: [ComponentName]
+Purpose: [description]
+
+Requirements:
+- Lazy load module if appropriate
+- Add auth guard if protected
+- Resolve data before activation with: [data]
+- Add to navigation menu at: [location]
+- Breadcrumb: [breadcrumb_path]
+```
+
+### Create Chart
+```
+Create a Highcharts chart in l5ui/src/app/[component]/:
+
+Chart type: [line/bar/pie/etc]
+Data source: API [endpoint]
+Purpose: [description]
+
+Requirements:
+- Responsive chart
+- Data points: [what to display]
+- X-axis: [data]
+- Y-axis: [data]
+- Series: [series_description]
+- Interactive features:
+  - Tooltips showing [data]
+  - Click event for [action]
+- Loading state while fetching data
+- Error state if data fails to load
+- Export options (PNG, PDF, CSV)
+
+Include chart configuration in separate file.
+```
+
+## Testing
+
+### Unit Tests for Django
+```
+Write comprehensive unit tests for [FILE_PATH]:
+
+Code to test:
+[paste code]
+
+Test cases needed:
+- Happy path scenarios
+- Edge cases: [specific_cases]
+- Error conditions: [error_scenarios]
+- Boundary conditions
+- Mock dependencies: [external_dependencies]
+
+Requirements:
+- Use Django TestCase
+- setUp method for test data
+- Clear test method names
+- Arrange-Act-Assert structure
+- Aim for >80% coverage
+- Test both success and failure paths
+```
+
+### Unit Tests for Angular
+```
+Write unit tests for [COMPONENT/SERVICE]:
+
+Code to test:
+[paste code]
+
+Test cases needed:
+- Component initialization
+- User interactions: [interactions]
+- API call success
+- API call failure
+- Input validation
+- Output events
+- Edge cases: [specific_cases]
+
+Requirements:
+- Mock all dependencies
+- Use TestBed configuration
+- Test async operations properly
+- Clear expectations
+- Descriptive test names
+```
+
+### Integration Tests
+```
+Write integration test for the complete flow:
+
+Feature: [feature_name]
+Flow:
+1. [step]
+2. [step]
+3. [step]
+
+Requirements:
+- Test backend and frontend integration
+- Test data flow through all layers
+- Verify API contracts
+- Check error propagation
+- Clean up test data after
+```
+
+## Debugging
+
+### Debug Error
+```
+Help me debug this error:
+
+Error message:
+[paste full error message and stack trace]
+
+Context:
+- Happened when: [user action or scenario]
+- Expected behavior: [what should happen]
+- Actual behavior: [what actually happens]
+- Recent changes: [code changes]
+- Environment: [dev/staging/prod]
+- Reproducible: [always/sometimes/once]
+
+Related code:
+[paste relevant code]
+
+Help me:
+1. Understand root cause
+2. Identify where to look
+3. Suggest fixes
+4. Prevent similar issues
+```
+
+### Performance Issue
+```
+This [endpoint/page/function] is slow:
+
+Location: [file_path or URL]
+Current performance: [metrics]
+Expected performance: [target]
+
+Code:
+[paste code]
+
+Analysis needed:
+1. Identify bottlenecks
+2. Database query optimization
+3. Caching opportunities
+4. Code optimization
+5. Scaling considerations
+
+Constraints:
+- [any constraints]
+```
+
+### Database Query Debug
+```
+This query is causing issues:
+
+[paste ORM query or SQL]
+
+Problem: [N+1 queries / slow performance / incorrect results]
+
+Context:
+- Model relationships: [describe]
+- Data volume: [number of records]
+- Expected result: [description]
+
+Help me:
+1. Analyze the query
+2. Identify the problem
+3. Optimize the query
+4. Add appropriate indexes
+```
+
+## Code Review
+
+### Self Review
+```
+Review this code before I create a PR:
+
+[paste code]
+
+Check for:
+1. Potential bugs
+2. Performance issues
+3. Security concerns
+4. Best practice violations
+5. Missing error handling
+6. Code quality and readability
+7. Test coverage
+8. Documentation quality
+
+Project context:
+- Backend: Django REST Framework
+- Frontend: Angular 14
+- Database: PostgreSQL
+```
+
+### Refactoring Suggestions
+```
+Suggest refactoring for this code:
+
+[paste code]
+
+Improve:
+1. Readability
+2. Maintainability
+3. Performance
+4. Testability
+5. Adherence to SOLID principles
+
+Keep the same functionality but make it better.
+Show before/after comparison.
+```
+
+## Documentation
+
+### Generate Docstrings
+```
+Add comprehensive docstrings to this code:
+
+[paste code]
+
+Include:
+- Function/class description
+- Parameter types and descriptions
+- Return value type and description
+- Exceptions raised
+- Usage examples
+- Notes about edge cases or gotchas
+
+Follow [Django/Angular] documentation standards.
+```
+
+### API Documentation
+```
+Generate API documentation for this endpoint:
+
+[paste endpoint code]
+
+Include:
+- Endpoint URL and method
+- Authentication requirements
+- Request parameters (path, query, body)
+- Request example
+- Response format
+- Response example
+- Status codes and meanings
+- Error responses and examples
+- Usage notes
+- Rate limiting info
+```
+
+### Generate README
+```
+Create a README for the [FEATURE_NAME] feature:
+
+Location: [directory]
+
+Include:
+1. Overview of the feature
+2. Architecture/design
+3. Setup instructions
+4. Usage examples
+5. API reference
+6. Configuration options
+7. Troubleshooting
+8. Contributing guidelines
+
+Target audience: Developers on the team
+```
+
+## Feature Development
+
+### Complete Feature Planning
+```
+I need to implement: [FEATURE_NAME]
+
+Requirements:
+[detailed requirements]
+
+Help me plan:
+1. Database schema changes needed
+2. Backend API endpoints to create
+3. Frontend components to build
+4. Third-party integrations needed
+5. Testing strategy
+6. Deployment considerations
+7. Potential challenges
+8. Implementation steps in order
+
+Project context:
+- Backend: Django in layerfivecore/
+- Frontend: Angular in l5ui/
+- Existing features: [related features]
+```
+
+### Code Generation for Feature
+```
+Generate [MODEL/COMPONENT/SERVICE] for [FEATURE_NAME]:
+
+Specifications:
+[detailed specs]
+
+Requirements:
+- Follow LayerFive conventions
+- Include comprehensive error handling
+- Add logging at appropriate levels
+- Write unit tests
+- Add inline documentation
+- Consider performance
+- Consider security
+
+Context:
+[relevant context about the project]
+```
+
+## Tips for Using Templates
+
+1. **Fill in ALL placeholders**: Replace [PLACEHOLDERS] with specific details
+2. **Add context**: Include relevant code, files, or documentation
+3. **Be specific**: The more specific you are, the better the output
+4. **Iterate**: Start with basic prompt, then refine based on results
+5. **Customize**: Adjust templates for your specific needs
+6. **Save variations**: Keep track of effective prompt variations
+7. **Share**: Share successful prompts with the team
+
+## Creating Your Own Templates
+
+When you find an effective prompt pattern:
+1. Generalize it by identifying common elements
+2. Add placeholders for variable parts
+3. Include context requirements
+4. Add it to this document
+5. Share with the team
+
+## Template Variables Reference
+
+Common placeholders used in templates:
+- `[APP_NAME]` - Django app name
+- `[MODEL_NAME]` - Django model name
+- `[COMPONENT_NAME]` - Angular component name
+- `[SERVICE_NAME]` - Service class name
+- `[FEATURE_NAME]` - Feature being developed
+- `[FILE_PATH]` - Path to file
+- `[ENDPOINT]` - API endpoint URL
+- `[METHOD]` - HTTP method
+- `[TYPE]` - TypeScript type
+- `[DESCRIPTION]` - Description of purpose
+- `[REQUIREMENTS]` - Specific requirements

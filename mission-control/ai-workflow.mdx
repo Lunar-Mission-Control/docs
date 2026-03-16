@@ -1,0 +1,370 @@
+# AI-Assisted Development Workflow Guide
+
+This guide outlines best practices for using AI coding assistants (like Claude Code, GitHub Copilot, etc.) in the LayerFive development workflow.
+
+## Table of Contents
+1. [Getting Started](#getting-started)
+2. [Daily Workflow](#daily-workflow)
+3. [Feature Development](#feature-development)
+4. [Code Review](#code-review)
+5. [Debugging](#debugging)
+6. [Best Practices](#best-practices)
+
+## Getting Started
+
+### Initial Setup
+1. **Review Agent Files**: Familiarize yourself with the agent files in this directory
+2. **Understand Project Structure**: Know where backend and frontend code lives
+3. **Environment Setup**: Ensure your development environment is working
+4. **Context Loading**: When starting a session, provide relevant context to the AI
+
+### Context Provision
+When working with an AI assistant, provide:
+- **Goal**: What you're trying to achieve
+- **Current State**: What's already implemented
+- **Constraints**: Any limitations or requirements
+- **Related Files**: Relevant code locations
+
+Example:
+```
+I need to add a new API endpoint to export customer data.
+Backend: layerfivecore/customer360/
+Frontend: l5ui/src/app/pages/customers/
+Requirements: Must support CSV and Excel formats, paginated results
+```
+
+## Daily Workflow
+
+### Morning Startup
+```bash
+# 1. Pull latest changes
+git pull origin main
+
+# 2. Start backend services
+cd layerfivecore
+docker compose up -d redis postgres
+source venv/bin/activate
+python manage.py runserver
+
+# 3. Start frontend (in new terminal)
+cd l5ui
+npm start
+```
+
+### Using AI for Daily Tasks
+
+#### Quick Code Explanations
+```
+AI Prompt: "Explain what this function does: [paste code]"
+```
+
+#### Finding Code
+```
+AI Prompt: "Where is the user authentication logic implemented?"
+```
+
+#### Writing Boilerplate
+```
+AI Prompt: "Create a new Django model for storing customer preferences with fields: user (FK), theme (choice), notifications (bool)"
+```
+
+## Feature Development
+
+### 1. Planning Phase
+Use AI to help plan the feature before coding:
+
+```
+AI Prompt:
+I need to add a feature for customers to save custom report templates.
+Requirements:
+- Save report configurations (filters, columns, date ranges)
+- List saved templates
+- Load and apply templates
+- Share templates with team
+
+Help me plan:
+1. Database schema needed
+2. API endpoints to create
+3. Frontend components to build
+4. Potential challenges
+```
+
+### 2. Implementation Phase
+
+#### Backend Development
+```
+AI Workflow:
+1. "Create Django model for ReportTemplate with these fields..."
+2. "Generate migrations and show me the migration file"
+3. "Create serializer for ReportTemplate model"
+4. "Implement ViewSet with CRUD operations"
+5. "Write tests for ReportTemplate API"
+```
+
+#### Frontend Development
+```
+AI Workflow:
+1. "Generate Angular service for report templates API"
+2. "Create component for listing report templates"
+3. "Implement form for creating new templates"
+4. "Add template selection to existing reports page"
+5. "Write unit tests for template service"
+```
+
+### 3. Integration Phase
+```
+AI Prompt:
+"Help me integrate the report template feature:
+- Backend API is at /api/report-templates/
+- Frontend service is ReportTemplateService
+- Need to add UI to existing reports page
+Show me what changes needed in reports component"
+```
+
+## Code Review
+
+### Using AI for Self-Review
+Before creating a PR, use AI to review your code:
+
+```
+AI Prompt:
+"Review this code for:
+- Potential bugs
+- Performance issues
+- Security concerns
+- Best practice violations
+- Missing error handling
+
+[paste code]"
+```
+
+### Documentation Generation
+```
+AI Prompt:
+"Generate documentation for this API endpoint including:
+- Request/response examples
+- Parameter descriptions
+- Error codes
+- Usage notes
+
+[paste endpoint code]"
+```
+
+## Debugging
+
+### Error Investigation
+```
+AI Prompt:
+"I'm getting this error: [paste error message]
+Context:
+- Happened when: [describe action]
+- Recent changes: [list changes]
+- Environment: [dev/staging/prod]
+
+Help me:
+1. Understand what's causing it
+2. Find where to look in the code
+3. Suggest potential fixes"
+```
+
+### Performance Issues
+```
+AI Prompt:
+"This endpoint is slow: /api/customer-analytics/
+[paste code]
+
+Help me:
+1. Identify performance bottlenecks
+2. Suggest database query optimizations
+3. Recommend caching strategy"
+```
+
+## Best Practices
+
+### Effective Prompting
+
+#### ✅ Good Prompts
+```
+Specific:
+"Create a Django REST API endpoint that accepts a list of customer IDs
+and returns their total purchase amounts, using select_related for performance"
+
+Contextualized:
+"In the l5ui Angular app, add a loading spinner to the customer list
+component while data is being fetched from the API. Use Material spinner component."
+```
+
+#### ❌ Poor Prompts
+```
+Vague:
+"Make the API faster"
+
+Incomplete:
+"Add authentication"
+(Which endpoints? What type of auth?)
+```
+
+### Iterative Development
+1. **Start Small**: Begin with a simple implementation
+2. **Test Early**: Verify each piece works before moving on
+3. **Refine**: Use AI to improve code quality
+4. **Document**: Generate documentation as you go
+
+### Validation
+Always validate AI-generated code:
+- [ ] Does it follow project conventions?
+- [ ] Are there any security issues?
+- [ ] Is error handling adequate?
+- [ ] Are edge cases covered?
+- [ ] Do tests pass?
+- [ ] Is it performant?
+
+### Code Quality Checks
+```
+AI Prompt Template:
+"Review this code for the LayerFive project:
+[paste code]
+
+Check:
+1. Follows Django/Angular best practices
+2. Proper error handling
+3. Security considerations
+4. Performance implications
+5. Test coverage
+6. Documentation quality"
+```
+
+## Specialized Workflows
+
+### Adding a New Django App
+```
+AI Workflow:
+1. "What should I name a Django app for [feature]?"
+2. "Generate the initial models for [app]"
+3. "Create serializers and viewsets"
+4. "Write URL routing"
+5. "Generate comprehensive tests"
+6. "Create admin configuration"
+```
+
+### Adding a New Angular Feature Module
+```
+AI Workflow:
+1. "Generate module structure for [feature]"
+2. "Create routing configuration"
+3. "Implement main component"
+4. "Build service for API communication"
+5. "Add to main app routing"
+6. "Write unit tests"
+```
+
+### Database Migrations
+```
+AI Workflow:
+1. "Review this model change: [paste models]"
+2. "What migration strategy should I use?"
+3. "Generate the migration commands"
+4. "What data migration is needed?"
+5. "How to rollback if needed?"
+```
+
+### API Integration
+```
+AI Workflow:
+1. "I need to integrate [third-party API]"
+2. "Show me the authentication approach"
+3. "Create service class for API calls"
+4. "Implement error handling and retries"
+5. "Add rate limiting"
+6. "Write integration tests with mocks"
+```
+
+## Collaboration with AI
+
+### Pair Programming Pattern
+1. **Explain**: Tell AI what you want to build
+2. **Review**: AI suggests implementation approach
+3. **Discuss**: Ask questions, raise concerns
+4. **Implement**: AI generates code
+5. **Refine**: Iterate on the implementation
+6. **Test**: Verify functionality
+7. **Document**: Generate documentation
+
+### Learning Mode
+Use AI to learn while you code:
+```
+AI Prompt:
+"Explain why this Django code uses select_related:
+[paste code]
+
+And show me an alternative approach with trade-offs"
+```
+
+## Time-Saving Tips
+
+### Templates and Boilerplate
+Keep common prompts ready:
+- "Generate Django model with full CRUD API and tests"
+- "Create Angular component with service integration"
+- "Write integration test for [feature]"
+- "Generate API documentation for [endpoint]"
+
+### Bulk Operations
+```
+AI Prompt:
+"I need to add type hints to these 5 functions:
+[paste functions]
+
+Add proper type hints for parameters and return values"
+```
+
+### Refactoring
+```
+AI Prompt:
+"Refactor this function to be more maintainable:
+[paste code]
+
+Break it into smaller functions with single responsibilities"
+```
+
+## Common Pitfalls to Avoid
+
+1. **Blind Trust**: Always review and test AI-generated code
+2. **Over-Reliance**: Understand the code, don't just copy-paste
+3. **Insufficient Context**: Provide enough context for accurate suggestions
+4. **Ignoring Project Patterns**: Ensure AI follows your project's conventions
+5. **Security Oversights**: Always verify security-critical code
+6. **Missing Tests**: Don't skip test generation
+7. **Poor Prompts**: Vague prompts lead to vague solutions
+
+## Measuring Success
+
+Track your AI-assisted development:
+- **Time Saved**: Compare development time before/after
+- **Code Quality**: Bugs found in AI-generated vs manual code
+- **Learning**: New patterns and techniques discovered
+- **Productivity**: Features delivered per sprint
+
+## Resources
+
+### Internal
+- Agent files in `/ai` directory
+- Project documentation in `/docs`
+- README files in backend and frontend
+
+### External
+- AI assistant documentation
+- Django best practices
+- Angular style guide
+- Testing frameworks documentation
+
+## Getting Help
+
+When stuck:
+1. Try rephrasing your prompt
+2. Provide more context
+3. Break down the problem into smaller pieces
+4. Ask AI to explain its reasoning
+5. Consult team members for complex decisions
+
+Remember: AI is a tool to augment your capabilities, not replace your judgment. Always apply critical thinking and validate generated code.

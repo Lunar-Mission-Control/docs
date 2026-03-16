@@ -1,0 +1,441 @@
+# AI Coding Best Practices for LayerFive
+
+This document outlines best practices for using AI coding assistants effectively and responsibly in the LayerFive project.
+
+## Core Principles
+
+### 1. AI as Assistant, Not Replacement
+- **You are the developer**: AI provides suggestions, you make decisions
+- **Critical thinking required**: Always review and understand AI-generated code
+- **Domain knowledge essential**: AI doesn't know your business logic
+- **Quality ownership**: You're responsible for code quality, not the AI
+
+### 2. Context is Everything
+The quality of AI output depends on the context you provide:
+- Project structure and conventions
+- Related code and dependencies
+- Business requirements
+- Technical constraints
+- Existing patterns to follow
+
+### 3. Iterative Collaboration
+- Start with high-level design
+- Break down into smaller tasks
+- Review each piece before proceeding
+- Refine and improve incrementally
+
+## Code Generation Best Practices
+
+### Provide Clear Requirements
+```
+❌ Bad:
+"Create a user model"
+
+✅ Good:
+"Create a Django User model in layerfivecore/useraccount/models.py that:
+- Extends AbstractUser
+- Adds company (FK to Company model)
+- Adds role (choice field: admin, user, viewer)
+- Has created_at and updated_at timestamps
+- Includes proper string representation"
+```
+
+### Request Specific Implementations
+```
+❌ Bad:
+"Make it work with the database"
+
+✅ Good:
+"Use Django ORM with select_related('company') to avoid N+1 queries
+when fetching users with their company information"
+```
+
+### Include Error Handling Requirements
+```
+✅ Good prompt:
+"Create this endpoint with error handling for:
+- Invalid input (400)
+- Unauthorized access (401)
+- Not found (404)
+- Database errors (500)
+Include appropriate log messages"
+```
+
+## Security Best Practices
+
+### Always Review for Security Issues
+Check AI-generated code for:
+- [ ] SQL injection vulnerabilities
+- [ ] XSS vulnerabilities
+- [ ] Authentication/authorization gaps
+- [ ] Sensitive data exposure
+- [ ] Insecure dependencies
+- [ ] Hard-coded secrets
+- [ ] Weak cryptography
+
+### Example Security Review
+```python
+# ❌ AI might generate (insecure):
+query = f"SELECT * FROM users WHERE id = {user_id}"
+
+# ✅ You should change to:
+user = User.objects.get(id=user_id)  # Parameterized, safe
+```
+
+### Secure Coding Checklist
+- [ ] No hard-coded credentials or API keys
+- [ ] Input validation on all user data
+- [ ] Proper authentication on endpoints
+- [ ] Authorization checks before data access
+- [ ] SQL injection prevention (use ORM)
+- [ ] XSS prevention (escape output)
+- [ ] CSRF protection enabled
+- [ ] Secure password handling
+
+## Performance Best Practices
+
+### Request Performance Considerations
+```
+✅ Good prompt:
+"Create this view with performance in mind:
+- Use select_related for foreign keys
+- Implement pagination (100 items per page)
+- Add database indexes on queried fields
+- Cache results for 5 minutes"
+```
+
+### Review for Performance Issues
+Common issues in AI-generated code:
+- N+1 query problems
+- Missing database indexes
+- Inefficient algorithms
+- Memory leaks (unclosed connections)
+- Missing caching
+- Blocking operations in async code
+
+### Performance Checklist
+- [ ] No N+1 queries
+- [ ] Appropriate database indexes
+- [ ] Pagination on list endpoints
+- [ ] Caching where beneficial
+- [ ] Lazy loading for large datasets
+- [ ] Async operations where appropriate
+
+## Testing Best Practices
+
+### Always Request Tests
+```
+✅ Good prompt:
+"Generate this function AND comprehensive tests covering:
+- Happy path
+- Edge cases (empty input, null values)
+- Error conditions
+- Boundary conditions
+Aim for >80% coverage"
+```
+
+### Test Quality Review
+Ensure AI-generated tests:
+- [ ] Actually test the functionality
+- [ ] Are independent (don't rely on test order)
+- [ ] Use appropriate assertions
+- [ ] Mock external dependencies
+- [ ] Have clear, descriptive names
+- [ ] Cover error cases
+- [ ] Are maintainable
+
+### Test Coverage
+- Unit tests for all new functions/methods
+- Integration tests for API endpoints
+- E2E tests for critical user workflows
+- Edge case coverage
+- Error handling coverage
+
+## Documentation Best Practices
+
+### Request Documentation
+```
+✅ Good prompt:
+"Generate this function with:
+- Comprehensive docstring
+- Parameter descriptions with types
+- Return value description
+- Example usage
+- Notes about edge cases or limitations"
+```
+
+### Documentation Standards
+```python
+def process_customer_data(customer_id: int, include_history: bool = False) -> dict:
+    """
+    Process and aggregate customer data for reporting.
+
+    Args:
+        customer_id: The unique identifier of the customer
+        include_history: Whether to include historical data (default: False)
+
+    Returns:
+        Dictionary containing:
+        - customer: Customer details
+        - metrics: Aggregated metrics
+        - history: Historical data (if include_history=True)
+
+    Raises:
+        ValueError: If customer_id is invalid
+        Customer.DoesNotExist: If customer not found
+
+    Example:
+        >>> data = process_customer_data(123, include_history=True)
+        >>> print(data['metrics']['total_purchases'])
+        42
+    """
+```
+
+## Code Quality Best Practices
+
+### Request Code Quality Standards
+```
+✅ Good prompt:
+"Generate this code following:
+- PEP 8 style guide
+- Type hints for all parameters
+- Descriptive variable names
+- Single Responsibility Principle
+- DRY (Don't Repeat Yourself)
+- Comprehensive error handling"
+```
+
+### Code Review Checklist
+- [ ] Follows project coding standards
+- [ ] Readable and maintainable
+- [ ] Properly formatted
+- [ ] No code duplication
+- [ ] Appropriate abstraction level
+- [ ] Clear variable/function names
+- [ ] Commented where necessary (not obvious code)
+
+### Refactoring
+Use AI to improve existing code:
+```
+✅ Good prompt:
+"Refactor this function to:
+- Improve readability
+- Reduce complexity
+- Extract repeated logic
+- Add type hints
+- Improve error handling
+[paste code]"
+```
+
+## Django-Specific Best Practices
+
+### Model Best Practices
+- Use appropriate field types
+- Add db_index for frequently queried fields
+- Implement clean() for validation
+- Use validators from django.core.validators
+- Add Meta class with ordering, constraints
+- Implement __str__ method
+
+### API Best Practices
+- Use DRF ViewSets for CRUD
+- Implement proper permissions
+- Add pagination to list views
+- Use appropriate status codes
+- Validate input with serializers
+- Document with docstrings
+
+### Database Best Practices
+- Always create migrations
+- Review migration files
+- Use transactions for related operations
+- Optimize queries with select_related/prefetch_related
+- Add indexes for foreign keys
+
+## Angular-Specific Best Practices
+
+### Component Best Practices
+- Use OnPush change detection
+- Implement OnDestroy and unsubscribe
+- Keep templates simple
+- Use smart/dumb component pattern
+- Avoid logic in templates
+
+### Service Best Practices
+- Use HttpClient for API calls
+- Implement error handling
+- Return Observables
+- Use RxJS operators for transformation
+- Cache when appropriate
+
+### Performance Best Practices
+- Lazy load modules
+- Use trackBy in ngFor
+- Unsubscribe from observables
+- Minimize change detection
+- Optimize bundle size
+
+## Version Control Best Practices
+
+### Before Committing AI-Generated Code
+- [ ] Review every line
+- [ ] Run all tests
+- [ ] Check linting
+- [ ] Test manually
+- [ ] Review diffs
+- [ ] Write meaningful commit messages
+
+### Commit Messages
+```
+❌ Bad:
+"AI generated code"
+"Updates"
+
+✅ Good:
+"feat: Add customer export API endpoint
+
+- Implements CSV and Excel export formats
+- Adds pagination for large datasets
+- Includes comprehensive tests
+- Updates API documentation"
+```
+
+## Collaboration Best Practices
+
+### Team Communication
+- Document AI-assisted changes in PR descriptions
+- Share useful prompts with the team
+- Discuss AI-generated architecture decisions
+- Review AI code together
+
+### Knowledge Sharing
+- Update these docs with new patterns
+- Share effective prompts
+- Document gotchas and workarounds
+- Create reusable prompt templates
+
+## Error Handling Best Practices
+
+### Request Comprehensive Error Handling
+```
+✅ Good prompt:
+"Implement this feature with error handling for:
+- Network failures (retry logic)
+- Invalid input (clear error messages)
+- Permission errors (appropriate status codes)
+- Database errors (transaction rollback)
+- External API failures (fallback behavior)
+Include logging at appropriate levels"
+```
+
+### Error Handling Checklist
+- [ ] All exceptions caught appropriately
+- [ ] User-friendly error messages
+- [ ] Proper logging
+- [ ] Appropriate HTTP status codes
+- [ ] Cleanup on errors (close connections, rollback transactions)
+- [ ] Don't expose sensitive information
+
+## Maintenance Best Practices
+
+### Keep Code Maintainable
+```
+✅ Good prompt:
+"Write this code to be maintainable:
+- Clear separation of concerns
+- Modular and testable
+- Well-documented
+- Following SOLID principles
+- Easy to extend in the future"
+```
+
+### Maintainability Checklist
+- [ ] Code is self-documenting
+- [ ] Complex logic explained
+- [ ] Dependencies minimized
+- [ ] Easy to test
+- [ ] Easy to modify
+- [ ] Follows project patterns
+
+## Common AI Pitfalls to Avoid
+
+### 1. Over-Reliance
+Don't blindly trust AI output:
+- Always review generated code
+- Understand what the code does
+- Verify it meets requirements
+- Test thoroughly
+
+### 2. Insufficient Context
+Provide enough context:
+- Project structure
+- Existing patterns
+- Related code
+- Business rules
+- Technical constraints
+
+### 3. Ignoring Edge Cases
+AI often generates happy-path code:
+- Request edge case handling
+- Add null checks
+- Validate inputs
+- Handle errors
+
+### 4. Copy-Paste Without Understanding
+Never commit code you don't understand:
+- Read through generated code
+- Ask AI to explain unclear parts
+- Refactor if needed
+- Add comments for complex logic
+
+### 5. Security Oversights
+AI might generate insecure code:
+- Review for vulnerabilities
+- Validate all inputs
+- Check authentication/authorization
+- Don't hard-code secrets
+
+## Continuous Improvement
+
+### Learn from AI
+- Study generated code patterns
+- Ask AI to explain its choices
+- Request alternative approaches
+- Compare different solutions
+
+### Improve Your Prompts
+- Track what works well
+- Refine prompts over time
+- Share effective prompts with team
+- Create prompt templates
+
+### Update Documentation
+- Document new patterns discovered
+- Share learnings with team
+- Update agent files
+- Keep best practices current
+
+## Success Metrics
+
+Track and improve:
+- **Code Quality**: Bugs in AI-generated vs manual code
+- **Development Speed**: Time saved with AI assistance
+- **Test Coverage**: Coverage of AI-generated tests
+- **Review Comments**: Issues found in AI code reviews
+- **Learning**: New techniques and patterns discovered
+
+## Final Checklist
+
+Before merging AI-generated code:
+- [ ] Reviewed and understood every line
+- [ ] Tests written and passing
+- [ ] Security reviewed
+- [ ] Performance checked
+- [ ] Documentation complete
+- [ ] Follows project conventions
+- [ ] Error handling adequate
+- [ ] Edge cases covered
+- [ ] Linting passed
+- [ ] Manually tested
+
+Remember: AI is a powerful tool, but you are the expert. Use it wisely, review critically, and maintain high standards.
