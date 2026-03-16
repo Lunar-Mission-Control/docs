@@ -50,6 +50,12 @@
             ]
           },
           {
+            "group": "Development",
+            "pages": [
+              "mission-control/ai-development"
+            ]
+          },
+          {
             "group": "Performance Reports",
             "pages": [
               "mission-control/performance-reports",
