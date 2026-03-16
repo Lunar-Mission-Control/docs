@@ -1,0 +1,158 @@
+# Role-Based Access Management System
+
+## **1. Overview**
+
+Need a unified, role-based access system that supports fine-grained control over user access to multiple products, modules, blocks, and functions, with contextual behavior based on client type (B2B or B2C). The system will ensure that user access is configurable, auditable, and scalable across multi-product ecosystem.
+
+---
+
+## **Product Requirement Document (PRD)**
+
+## **2. Objectives**
+
+- Provide centralized access management across multiple products.
+- Support hierarchical access granularity (product → module → block → function).
+- Enable dynamic behavior for inaccessible items (hidden, visible but disabled, or partially visible).
+- Ensure flexibility for role, client type, and access group configurations.
+
+---
+
+## **3. Key Entities and Relationships**
+
+| **Entity** | **Description** | **Relationship** |
+| --- | --- | --- |
+| Product | Software offering (4 total). | Has multiple Modules. |
+| Module | Logical grouping of functionality. | Belongs to one Product; contains multiple Blocks. |
+| Block | Functional component (e.g., dashboard, analytics). | Part of a Module; has multiple Functions. |
+| Function | Specific capability (view, edit, delete, report). | Belongs to a Block. |
+| Role | Predefined or custom role for users. | Associated with Access Groups. |
+| Access Group | Logical grouping of functions across multiple levels. | Assigned to one or more Roles. |
+| Client Account | B2B or B2C customer entity. | Users are attached to one or more. |
+| User | Platform user with a Role and assigned Account(s). | Access governed by Role + Client Type. |
+
+---
+
+## **4. Functional Requirements**
+
+## **4.1 Access Control**
+
+- Admins must be able to define Access Groups that bundle multiple Products, Modules, Blocks, and Function permissions.
+- A Role can be assigned one or more Access Groups.
+- Users inherit permissions through their Role and Access Groups based on the assigned client account type.
+
+## **4.2 Client-Type Contextual Behavior**
+
+- Each Module and Block must define applicable client types (B2B, B2C, or both).
+- When user permissions intersect with client types:
+    - If a module or block is not applicable, it should not be shown.
+    - If it’s applicable but inaccessible, the system behavior follows an admin-defined rule (hide / show disabled / show limited).
+
+## **4.3 User Experience Rules**
+
+- Hidden modules should completely disappear from navigation.
+- Inaccessible modules (if visible) must display lock icons or “access restricted” indicators.
+- System should cache user permissions for performance but refresh after any role or group change.
+
+## **4.4 Admin Console Features**
+
+- Define Products, Modules, Blocks, Functions.
+- Create and manage Access Groups (include multi-level functionality).
+- Assign Access Groups to Roles.
+- Assign Roles to Users within client accounts.
+- Toggle visibility behavior (show, hide, disable).
+- Audit trail view for all role or access changes.
+
+## **4.5 Reporting and Audit**
+
+- Ability to export a matrix report of user → account → role → access group → permissions.
+- Record timestamped changes for role or group assignments.
+
+---
+
+## **5. Non-Functional Requirements**
+
+- Performance: Permission checks must resolve under 100ms per request.
+- Scalability: Must support 10K+ users, 100+ roles, and 500+ access groups.
+- Security: Backend APIs must enforce access checks server-side.
+- Auditability: All role and access updates must be versioned.
+- Extensibility: Future client types beyond B2B/B2C should be easily added.
+
+---
+
+## **Technical Design**
+
+## **6. System Architecture Overview**
+
+- Core Components:
+    1. Access Management Service (AMS)
+    2. Role and Group Repository
+    3. Permission Cache Layer
+    4. Policy Engine
+    5. Admin Console (UI)
+- Interaction Flow:
+    1. User logs in and is associated with one or more client accounts.
+    2. AMS resolves user permissions (role → access group → allowed functions).
+    3. Policy Engine enforces contextual access (B2B/B2C applicability + visibility behavior).
+    4. Permissions cached (e.g., Redis) for faster runtime evaluation.
+    5. Admin Console writes role/group definitions to the repository.
+
+---
+
+## **7. Data Model Sketch (Simplified)**
+
+Tables / Collections:
+
+- Products (id, name)
+- Modules (id, name, product_id, applicable_to [B2B|B2C|Both])
+- Blocks (id, name, module_id, applicable_to)
+- Functions (id, name, block_id, type [view|edit|report|delete])
+- AccessGroups (id, name)
+- AccessGroupItems (group_id, item_type [product/module/block/function], item_id)
+- Roles (id, name)
+- RoleAccessGroups (role_id, group_id)
+- Users (id, name, email)
+- UserRoles (user_id, role_id, client_account_id)
+- VisibilityRules (scope [module/block], rule_type [hide/show_disabled/show])
+
+Example Query Flow:
+
+sql
+
+- *- Fetch user’s effective permissions*
+
+SELECT f.name AS function_name
+
+FROM Users u
+
+JOIN UserRoles ur ON u.id = ur.user_id
+
+JOIN Roles r ON r.id = ur.role_id
+
+JOIN RoleAccessGroups rag ON rag.role_id = r.id
+
+JOIN AccessGroups g ON g.id = rag.group_id
+
+JOIN AccessGroupItems i ON i.group_id = g.id
+
+JOIN Functions f ON f.id = i.item_id
+
+WHERE u.id = :user_id AND ur.client_account_id = :account_id;
+
+---
+
+## **8. Access Evaluation Logic**
+
+1. Determine applicable client type (from client account).
+2. Retrieve role → access groups → functions.
+3. Filter modules/blocks where applicable_to includes client type.
+4. Apply visibility rule:
+    - hide: omit entirely,
+    - show-disabled: render but lock,
+    - show: render as normal.
+5. Return merged access matrix for UI rendering
+
+## **9. Module-Block-Function Mapping:**
+
+[New Menu Implementation - Google Sheets](https://docs.google.com/spreadsheets/d/1u1K0X3IEPPGp7aM-g_vAHCjGr25f6020p1ievC3usy8/edit?gid=469481881#gid=469481881)
+
+[Menu Structure - Google Sheets](https://docs.google.com/spreadsheets/d/190HmvBZdg5o03QHJ34oGgL2hwDeyI4ldywHMKvUaQLA/edit?pli=1&gid=0#gid=0)
