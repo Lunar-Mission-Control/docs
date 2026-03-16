@@ -1,306 +1,140 @@
 ---
 title: "AI-Assisted Development"
-description: "Compliance requirements, best practices, and resources for using AI coding assistants"
+description: "Using AI coding assistants effectively at LayerFive"
 icon: "robot"
 ---
 
 ## Overview
 
-LayerFive uses AI coding assistants (Claude Code, GitHub Copilot, etc.) to accelerate development while maintaining superior code quality. This page outlines **mandatory compliance requirements** and links to detailed resources.
+We use AI coding assistants (Claude Code, GitHub Copilot) to develop faster. This guide covers the basics.
 
-<Warning>
-**Compliance is Non-Negotiable**: All developers must follow the requirements outlined in this guide and the linked resources before using AI coding assistants.
-</Warning>
+## Quick Start
 
----
+### Simple Rules
 
-## Quick Reference
+1. **Give credit** - Add co-author to commits with AI code
+2. **Be transparent** - Note what AI generated in PRs
+3. **Review everything** - You own the code
+4. **Use common sense** - Be careful with auth, payments, sensitive data
 
-All AI development resources are located in the [`/ai` directory](https://github.com/layerfive/mission-control/tree/main/ai) of the repository.
+## Co-Author Attribution
 
-| Resource | Purpose | Required |
-|----------|---------|----------|
-| [COMPLIANCE.md](/ai/COMPLIANCE.md) | Mandatory policies and expectations | ✅ Yes |
-| [PR-TEMPLATE.md](/ai/PR-TEMPLATE.md) | Required PR template with AI disclosure | ✅ Yes |
-| [PROTECTED-AREAS.md](/ai/PROTECTED-AREAS.md) | Code areas with AI restrictions | ✅ Yes |
-| [METRICS.md](/ai/METRICS.md) | Time tracking and impact measurement | ✅ Yes |
-| [README.md](/ai/README.md) | Complete guide to all AI resources | Recommended |
-
----
-
-## Mandatory Requirements
-
-### 1. Co-Author Attribution
-
-Every commit with AI-generated code **MUST** include co-author attribution for Swarmia tracking:
+When AI helps write code, add this to your commit:
 
 ```bash
 git commit -m "feat: Add customer export API
 
-Implemented CSV and Excel export formats.
+Made with Claude
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-<Info>
-This attribution enables tracking AI impact in Swarmia and helps measure development velocity improvements.
-</Info>
+**Why**: Tracks AI usage in Swarmia.
 
-### 2. Pull Request Disclosure
+## PR Template
 
-Every PR with AI-generated code **MUST** use the [PR template](/ai/PR-TEMPLATE.md) and include:
-
-- List of AI-generated components with % contribution
-- List of manually written components
-- Areas flagged for extra review
-- Changes made after AI generation
-- Development metrics (time saved, debugging time, net saved)
-
-**Example PR Disclosure:**
+Include a simple AI section in your PRs:
 
 ```markdown
-## AI Usage Disclosure
+## AI Assistance
+Used Claude to generate:
+- Customer export models and serializers
+- Basic tests
 
-### AI-Generated Components
-- Models: ReportTemplate (95% AI)
-- Serializers: ReportTemplateSerializer (100% AI)
-- Views: ReportTemplateViewSet (80% AI, manually added permissions)
-- Tests: test_report_template.py (90% AI)
-
-### Manual Components
-- URL routing
-- Migration review
-- Integration with existing reports page
-
-### Review Focus Areas
-⚠️ Permission logic (lines 45-62) - please verify authorization
-⚠️ Template sharing (lines 120-145) - complex logic needs review
-
-### Metrics
-- Estimated without AI: 8 hours
-- Actual with AI: 3 hours
-- Net time saved: 3.5 hours
-- AI contribution: 75%
+Manually added:
+- Permission logic
+- Complex validation
 ```
 
-### 3. Protected Areas Compliance
+See the full [PR template](https://github.com/Lunar-Mission-Control/ai-development/blob/main/docs/PR-TEMPLATE.md).
 
-**NEVER** use AI in protected areas without senior approval. See [PROTECTED-AREAS.md](/ai/PROTECTED-AREAS.md) for the complete list.
+## When to Be Careful
 
-<Warning>
-**Critical Areas (Manual Development Strongly Recommended)**:
-- 🔴 Authentication/Authorization logic
-- 🔴 Payment/Financial code
-- 🔴 PII/Privacy-sensitive code
-- 🔴 Production infrastructure
-- 🔴 Security/Encryption code
-- 🔴 Database migrations affecting production data
-</Warning>
+**Think twice before using AI for**:
+- Authentication/authorization
+- Payment processing
+- PII/customer data handling
+- Production infrastructure
 
-### 4. Metrics Tracking
+When in doubt, ask a senior developer.
 
-Track and report for every AI-assisted PR:
+## Guidelines
 
-- **Time estimated without AI**: How long would this take manually?
-- **Actual time with AI**: Wall-clock time from start to PR
-- **Time saved**: Estimated - Actual
-- **Review time**: Time reviewing AI-generated code
-- **Debugging time**: Time fixing AI code issues
-- **Net time saved**: Time saved - Review time - Debugging time
+<AccordionGroup>
+  <Accordion title="Security Checklist">
+    Always check AI-generated code for:
+    - Hard-coded secrets
+    - Proper input validation
+    - SQL injection prevention
+    - Authentication checks
+  </Accordion>
 
-<Info>
-See [METRICS.md](/ai/METRICS.md) for detailed tracking guidance and examples.
-</Info>
+  <Accordion title="Code Review Standards">
+    You own all code you commit:
+    - Read through AI-generated code
+    - Understand what it does
+    - Test it thoroughly
+    - Make sure it follows our patterns
+  </Accordion>
 
-### 5. Quality Standards
+  <Accordion title="What AI is Good At">
+    Use AI to accelerate:
+    - Boilerplate code (models, serializers)
+    - Standard CRUD operations
+    - Unit tests
+    - Documentation
+    - Common patterns
+  </Accordion>
+</AccordionGroup>
 
-You are responsible for ALL code you commit, regardless of who/what wrote it:
+## Resources
 
-- [ ] Reviewed every line of AI-generated code
-- [ ] Understand what the code does
-- [ ] Security review completed
-- [ ] Tests written and passing
-- [ ] No hard-coded secrets
-- [ ] Follows LayerFive conventions
+<CardGroup cols={2}>
+  <Card
+    title="Best Practices"
+    icon="shield-check"
+    href="/mission-control/ai-best-practices"
+  >
+    Code quality and security guidelines
+  </Card>
+  <Card
+    title="Workflow Guide"
+    icon="diagram-project"
+    href="/mission-control/ai-workflow"
+  >
+    Daily development workflow with AI
+  </Card>
+  <Card
+    title="Prompt Templates"
+    icon="wand-magic-sparkles"
+    href="/mission-control/ai-prompts"
+  >
+    Copy-paste prompts for common tasks
+  </Card>
+  <Card
+    title="AI Development Repo"
+    icon="github"
+    href="https://github.com/Lunar-Mission-Control/ai-development"
+  >
+    Agent files and detailed docs
+  </Card>
+</CardGroup>
 
----
+## Agent Files
 
-## Review Requirements
+Role-specific AI agent configurations:
 
-Different types of code require different review processes:
+- **[Backend Agent](https://github.com/Lunar-Mission-Control/ai-development/blob/main/agents/backend-agent.md)** - Django development
+- **[Frontend Agent](https://github.com/Lunar-Mission-Control/ai-development/blob/main/agents/frontend-agent.md)** - Angular development
+- **[Debugging Agent](https://github.com/Lunar-Mission-Control/ai-development/blob/main/agents/debugging-agent.md)** - Troubleshooting
+- **[Testing Agent](https://github.com/Lunar-Mission-Control/ai-development/blob/main/agents/testing-agent.md)** - Writing tests
 
-### Standard AI-Generated Code
-- 1 approving reviewer
-- Developer reviewed all code
-- All tests passing
-- Security checklist completed
+## Getting Help
 
-### High-Risk Areas
-- 2 approvers (at least 1 senior)
-- Extra scrutiny on complex logic
-- Performance testing if applicable
-
-### Protected Areas
-- 2 senior approvers required
-- Security specialist review
-- Comprehensive testing
-- Documented justification for AI usage
-
----
-
-## Outage Attribution
-
-<Warning>
-**CRITICAL**: Any production outage must be analyzed for AI involvement.
-</Warning>
-
-If an outage occurs:
-
-1. Determine if AI-generated code was involved
-2. Analyze what was AI-generated vs manual
-3. Review the approval and review process
-4. Identify what was missed in review
-5. Document learnings and prevention steps
-6. Update protected areas if needed
-
-**Zero tolerance**: Repeated AI-related production issues will trigger policy review.
-
----
-
-## Getting Started
-
-### For New Developers
-
-**Before using AI** (non-negotiable):
-
-1. Read [COMPLIANCE.md](/ai/COMPLIANCE.md) completely
-2. Review [PROTECTED-AREAS.md](/ai/PROTECTED-AREAS.md)
-3. Review [METRICS.md](/ai/METRICS.md)
-4. Acknowledge compliance requirements to tech lead
-
-**Learning the workflow**:
-
-5. Review agent file for your role ([backend](/ai/backend-agent.md) or [frontend](/ai/frontend-agent.md))
-6. Browse [prompt templates](/ai/prompt-templates.md)
-7. Complete first task with mentor supervision
-8. Create first PR using the [PR template](/ai/PR-TEMPLATE.md)
-
-### For Experienced Developers
-
-1. Review [COMPLIANCE.md](/ai/COMPLIANCE.md) if you haven't
-2. Use [PR-TEMPLATE.md](/ai/PR-TEMPLATE.md) for all AI PRs
-3. Track metrics honestly and completely
-4. Share effective patterns with team
+- **Questions?** Ask in team chat
+- **Unsure?** Talk to a senior developer
+- **Issues?** Create an issue in the [AI development repo](https://github.com/Lunar-Mission-Control/ai-development)
 
 ---
 
-## Development Resources
-
-### Agent Files (Role-Specific Guidance)
-
-| Agent | Purpose | Best For |
-|-------|---------|----------|
-| [backend-agent.md](/ai/backend-agent.md) | Django backend development | Models, APIs, database work |
-| [frontend-agent.md](/ai/frontend-agent.md) | Angular frontend development | Components, services, UI |
-| [debugging-agent.md](/ai/debugging-agent.md) | Troubleshooting and debugging | Finding and fixing issues |
-| [testing-agent.md](/ai/testing-agent.md) | Test writing strategies | Unit, integration, e2e tests |
-
-### Documentation & Guides
-
-| Document | Purpose | Best For |
-|----------|---------|----------|
-| [workflow-guide.md](/ai/workflow-guide.md) | Daily development workflow | Understanding AI integration |
-| [best-practices.md](/ai/best-practices.md) | Quality and security standards | Ensuring code quality |
-| [prompt-templates.md](/ai/prompt-templates.md) | Reusable prompt templates | Quick access to proven prompts |
-
----
-
-## Success Metrics
-
-We measure AI development success across three dimensions:
-
-### Velocity
-- **Target**: 20-40% time savings on feature development
-- **Goal**: Faster than competitor tech agencies
-- **Tracking**: Sprint velocity, time-to-market
-
-### Quality
-- **Target**: AI code bug rate ≤ manual code bug rate
-- **Critical**: Zero production outages from AI code
-- **Coverage**: ≥80% test coverage on AI-generated code
-
-### Compliance
-- **Target**: 100% AI attribution in commits
-- **Target**: 100% PR disclosure completion
-- **Target**: Zero violations of protected areas
-
----
-
-## Monthly Reporting
-
-### Individual (All Developers)
-
-At the end of each month, compile your AI usage:
-
-- Total PRs with AI contribution
-- Total time saved vs debugging time
-- Net time saved
-- Quality metrics (bugs, coverage)
-- Learnings and patterns discovered
-
-### Team (Tech Lead)
-
-Quarterly comprehensive analysis:
-
-- Aggregate team metrics
-- ROI analysis (time saved vs tool cost)
-- Quality comparison (AI vs manual)
-- Swarmia analytics review
-- Competitive positioning
-- Process improvements
-
----
-
-## Enforcement
-
-### Violations
-
-| Severity | Examples | Response |
-|----------|----------|----------|
-| **Minor** | Missing co-author attribution, incomplete metrics | PR rejected, must update |
-| **Major** | AI in protected areas without approval, hiding AI usage | Tech lead discussion, potential AI privilege loss |
-| **Critical** | AI-caused outage due to negligence, repeated violations | Formal performance review |
-
----
-
-## Support & Questions
-
-### Getting Help
-
-- **Compliance questions**: Ask tech lead before proceeding
-- **Not sure if area is protected**: Check [PROTECTED-AREAS.md](/ai/PROTECTED-AREAS.md) or ask
-- **Metrics unclear**: See [METRICS.md](/ai/METRICS.md) or ask tech lead
-- **General questions**: Team chat or standup
-
-### Resources
-
-- **All AI documentation**: `/ai` directory in repository
-- **Django docs**: https://docs.djangoproject.com/
-- **Angular docs**: https://angular.io/docs
-- **DRF docs**: https://www.django-rest-framework.org/
-
----
-
-## Acknowledgment
-
-By using AI coding assistants on this project, you acknowledge:
-
-- ✅ You have read and understand [COMPLIANCE.md](/ai/COMPLIANCE.md)
-- ✅ You will follow all requirements outlined in this guide
-- ✅ You take full responsibility for all code you commit
-- ✅ You will maintain transparency about AI usage
-- ✅ You will prioritize quality and security over speed
-
-<Info>
-**Remember**: AI is a tool to help us move faster while maintaining superior quality. Compliance requirements exist to ensure we achieve both goals safely.
-</Info>
+**Remember**: We're learning together. Start simple, be transparent, and we'll refine our approach as we go.
