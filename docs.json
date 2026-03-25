@@ -46,7 +46,8 @@
           {
             "group": "Configuration",
             "pages": [
-              "mission-control/feature-flags"
+              "mission-control/feature-flags",
+              "mission-control/slack-integration"
             ]
           },
           {

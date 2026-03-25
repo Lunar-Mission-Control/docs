@@ -1,0 +1,190 @@
+---
+title: "Slack Integration"
+description: "Connect Slack to receive real-time notifications for notes, outliers, task failures, and more"
+icon: "slack"
+---
+
+The Slack integration sends automated notifications to your team's Slack channels when things happen in Mission Control — notes created, outliers detected, tasks failing, and daily digest summaries.
+
+## How it works
+
+The system has three layers:
+
+1. **Workspace Connection** links your Slack workspace to Mission Control via OAuth. The bot gets installed into your workspace and joins the channels you invite it to.
+2. **Notification Rules** control which event types get sent to which channels. Each rule maps a notification type (e.g., "Outlier Alerts") to a specific Slack channel.
+3. **Automated Dispatch** fires notifications in real-time when events occur — no polling or manual triggers needed.
+
+<Info>
+  The bot can only post to channels it has been invited to. If a channel doesn't appear in the dropdown, invite the bot to that channel first in Slack.
+</Info>
+
+## Connecting your workspace
+
+<Steps>
+<Step title="Go to Administration > Slack Settings">
+  Navigate to the Slack Settings page under Administration in the sidebar.
+</Step>
+
+<Step title="Click Add to Slack">
+  Click the **Add to Slack** button. You'll be redirected to Slack's OAuth consent screen.
+</Step>
+
+<Step title="Authorize the app">
+  Select the workspace you want to connect and click **Allow**. You'll be redirected back to Mission Control with a success message.
+</Step>
+
+<Step title="Invite the bot to channels">
+  In Slack, go to each channel where you want notifications and type `/invite @Houston`. The bot needs to be a member of a channel before it can post there.
+</Step>
+</Steps>
+
+### Agency vs Client installs
+
+- **Agency users** who install the app get the workspace flagged as an agency workspace. They can route notifications for any of their clients.
+- **Client users** who install get a client workspace scoped to their account. Their notifications are automatically scoped to their own data.
+
+Both can coexist — an agency can have its own workspace receiving all-client alerts, while individual clients have their own workspaces for their team.
+
+## Configuring notifications
+
+Switch to the **Notifications** tab to manage notification rules.
+
+### Adding a notification
+
+<Steps>
+<Step title="Click Add Notification">
+  Click the **Add Notification** button in the top right.
+</Step>
+
+<Step title="Select a channel">
+  Type to search for a Slack channel. Only channels the bot has been invited to will appear.
+</Step>
+
+<Step title="Choose the notification type">
+  Select what type of event should trigger a message to this channel:
+
+  | Type | When it fires |
+  |------|--------------|
+  | **System Errors** | Any unhandled exception in the platform |
+  | **Outlier Alerts** | When an outlier definition detects a metric deviation |
+  | **Task Failures** | When a data pipeline job fails or enters dead letter |
+  | **Daily Digest** | Scheduled summary of notes, outliers, and key metrics |
+  | **Note Created** | When a new note is created (excludes private notes) |
+  | **Note Updated** | When an existing note is modified |
+</Step>
+
+<Step title="Select a client (agency users only)">
+  Agency users with access to multiple clients will see a **Client** dropdown. Choose a specific client to scope the notification, or leave it as **All Clients** to receive notifications for every client.
+
+  Client users don't see this field — their notifications are automatically scoped to their account.
+</Step>
+
+<Step title="Toggle active and save">
+  The **Active** toggle lets you temporarily disable a notification without deleting it. Click **Add Notification** to save.
+</Step>
+</Steps>
+
+<Tip>
+  You can create multiple rules for the same channel — for example, send both outlier alerts and note updates to `#marketing-alerts`.
+</Tip>
+
+## Daily digest
+
+The daily digest sends a summary to configured channels at a set time each day. Configure it on the **Connection** tab:
+
+1. Toggle **Daily Digest** on for the workspace
+2. Select the send time from the dropdown
+3. Click **Save**
+
+The digest includes:
+- Notes summary (count by status)
+- Outlier summary (count by severity)
+- Key metrics snapshot
+
+<Note>
+  The daily digest requires the Celery Beat scheduler to be running. See the deployment section below.
+</Note>
+
+## Houston in Slack
+
+When an outlier alert is posted, it includes an **Ask Houston** button. Clicking it starts a threaded conversation with Houston, Mission Control's AI copilot, directly in Slack.
+
+Houston has access to the same tools as the web chat:
+- Channel performance metrics
+- Outlier occurrence details
+- Notes and reports
+- Customer data
+
+Houston can also switch between clients mid-conversation for agency users. Use `--client <client_id>` in your first message to set the context, or ask Houston to switch by mentioning a client name.
+
+## Deployment
+
+The Slack integration requires three background processes alongside the Django web server:
+
+### Slack Bot (Socket Mode)
+
+```bash
+python manage.py run_slack_bot
+```
+
+Connects to Slack via WebSocket. Handles interactive actions (Ask Houston button), slash commands, and @mentions. One connection per active workspace.
+
+### Celery Worker
+
+```bash
+celery -A layerfive worker --loglevel=info
+```
+
+Processes async notification tasks. When a signal fires (note created, task failed, etc.), the notification is queued as a Celery task and picked up by the worker.
+
+### Celery Beat
+
+```bash
+celery -A layerfive beat --loglevel=info
+```
+
+Runs scheduled tasks — daily digest delivery and periodic outlier detection.
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `SLACK_CLIENT_ID` | Slack app OAuth client ID |
+| `SLACK_CLIENT_SECRET` | Slack app OAuth client secret |
+| `SLACK_REDIRECT_URI` | OAuth callback URL (e.g., `https://id.lunarmc.ai/api/integration/oauth/slack`) |
+| `SLACK_SIGNING_SECRET` | Slack app signing secret |
+
+The bot and app tokens are stored per-workspace in the database after OAuth installation. The `SLACK_BOT` settings dict in `settings.py` provides fallback tokens for the Socket Mode bot process.
+
+## Architecture
+
+```
+Event (note save, outlier detected, task fail)
+  → Django signal / explicit call
+    → send_slack_notification.delay()  [Celery async task]
+      → SlackBotNotificationService.send_notification()
+        → get_notification_targets()  [matches SlackNotificationRule]
+          → chat.postMessage to each matched channel
+        → get_dm_targets()  [matches SlackUserNotificationPref]
+          → DM to opted-in users
+```
+
+### Key backend files
+
+| File | Purpose |
+|------|---------|
+| `slack_bot/models.py` | SlackWorkspace, SlackNotificationRule, SlackUserMapping |
+| `slack_bot/signals.py` | post_save hooks on Notes and IntegrationTask |
+| `slack_bot/tasks.py` | Celery tasks for async notification dispatch |
+| `slack_bot/services/notification_service.py` | Routing and delivery logic |
+| `slack_bot/services/block_builder.py` | Slack Block Kit message formatting |
+| `slack_bot/utils.py` | Target resolution, severity filtering |
+| `slack_bot/views.py` | REST API for workspace and rule management |
+| `integration/views.py` | OAuth callback handler (SlackOAuthCallback) |
+
+### Frontend files
+
+| File | Purpose |
+|------|---------|
+| `slack-settings/slack-settings.component.*` | Connection and Notifications tabs |
+| `notification-rule-dialog/notification-rule-dialog.component.*` | Add/Edit notification dialog |
