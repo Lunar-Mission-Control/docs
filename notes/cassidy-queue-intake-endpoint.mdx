@@ -1,0 +1,189 @@
+# Cassidy Intake Endpoint
+
+Push action items and takeaways from client calls into the PMT Queue for review.
+
+## Endpoint
+
+```
+POST /api/notes/queue/intake/cassidy
+```
+
+## Authentication
+
+Uses the REST API token. Include the `l5key` header with the client's API key.
+
+```
+l5key: <your_rest_api_token>
+```
+
+The API key is generated in **Settings > System Configuration > Rest API Token**. Each key is scoped to a specific client, the `client_id` is extracted from the token automatically.
+
+---
+
+## Request
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `l5key` | **Yes** | REST API token for the client |
+| `Content-Type` | **Yes** | `application/json` |
+
+### Body
+
+Send a single JSON object or an array of objects (max 100 per request).
+
+#### Required
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | Action item or takeaway title. Max 60 characters (rejected if longer). |
+
+#### Optional — Core Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | string | Start date in `YYYY-MM-DD` format. Defaults to today if omitted. |
+| `end_date` | string | Deadline in `YYYY-MM-DD` format. |
+| `notes` | string | Additional details or context from the call. |
+| `media_source` | string | Channel or platform (e.g. `"Meta"`, `"Google Ads"`). |
+| `campaign` | string | Campaign name if relevant. |
+| `ads` | string | Ad name if relevant. |
+| `on_it_id` | integer | User ID of the assignee. |
+
+#### Optional — Categorization
+
+| Field | Type | Valid Values |
+|-------|------|-------------|
+| `category` | string | `"GTM Calendar"`, `"Action Item"`, `"Creative"`, `"Test & Learn"`. Defaults to `"Action Item"` if omitted. |
+| `subcategory` | string | Must match the category (see pairing table below). Rejected if the pair is invalid. |
+| `priority` | string | `"Low"`, `"Medium"`, `"High"`, `"Urgent"` |
+| `status` | string | `"In Queue"` (default), `"Planned"`, `"WIP"`, `"Launched"`, `"Complete"`, `"Stuck"`, `"Deferred"`, `"Cancelled"` |
+| `kpi` | string | `"Revenue"`, `"MER"`, `"CTR"`, `"CPC"`, `"nCAC"`, `"CVR"`, `"AOV"`, `"Other"`, `"n/a"` |
+| `month` | string | `"January"` through `"December"` |
+
+#### Category / Subcategory Pairings
+
+| Category | Valid Subcategories |
+|----------|-------------------|
+| `"GTM Calendar"` | `"Promotion"`, `"Product Launch"`, `"Campaign"`, `"Email/SMS"` |
+| `"Action Item"` | `"Lunar"`, `"Client"` |
+| `"Creative"` | `"Flight"`, `"Brief"`, `"UGC"` |
+| `"Test & Learn"` | `"Creative"`, `"Tactic"`, `"Audience"`, `"Funnel"` |
+
+Sending a subcategory that doesn't belong to the given category will return a `400` validation error. Subcategory without a category is also rejected.
+
+#### Optional — Extended Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `expected_impact` | string | Expected impact description. |
+| `outcome_learnings` | string | Outcome or learnings notes. |
+| `client_visibility` | boolean | `true` to make visible to client users. Defaults to `true` for Cassidy intake. |
+
+### Fields set automatically by the backend
+
+These are **not** sent by Cassidy:
+
+| Field | Value |
+|-------|-------|
+| `client_id` | Extracted from the `l5key` token |
+| `intake_source` | `"cassidy"` |
+| `queue_status` | `"pending"` |
+| `status` | `"In Queue"` |
+| `category` | `"Action Item"` (overridable) |
+| `client_visibility` | `true` (visible to client users by default) |
+| `created_by` | `null` (displayed as "Cassidy" in the UI) |
+
+---
+
+## Examples
+
+### Single item
+
+```bash
+curl -X POST https://your-domain.com/api/notes/queue/intake/cassidy \
+  -H "l5key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Facebook Ads 7-Day Performance Review",
+    "date": "2026-03-25",
+    "notes": "ROAS dropped from 5.71x (30-day avg) to 3.10x over last 7 days. Monitor for audience saturation.",
+    "media_source": "Facebook Ads",
+    "category": "Action Item",
+    "priority": "Medium"
+  }'
+```
+
+### Batch (multiple items)
+
+```bash
+curl -X POST https://your-domain.com/api/notes/queue/intake/cassidy \
+  -H "l5key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "title": "Top 5 Creative Assets Performance Summary",
+      "category": "Creative",
+      "priority": "High"
+    },
+    {
+      "title": "Top Channel Performance Analysis - April 2026",
+      "date": "2026-04-01",
+      "media_source": "Google Ads",
+      "category": "Action Item",
+      "subcategory": "Lunar"
+    }
+  ]'
+```
+
+### Minimal request (title only)
+
+```bash
+curl -X POST https://your-domain.com/api/notes/queue/intake/cassidy \
+  -H "l5key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Google Ads Campaign Performance Tracking"}'
+```
+
+---
+
+## Responses
+
+### 201 Created
+
+```json
+{
+  "responseCode": 201,
+  "responseMessage": "2 item(s) added to queue.",
+  "items": [
+    {"id": 12345, "title": "Top 5 Creative Assets Performance Summary"},
+    {"id": 12346, "title": "Top Channel Performance Analysis - April 2026"}
+  ]
+}
+```
+
+### 400 Bad Request (validation errors)
+
+```json
+{
+  "responseMessage": "Validation failed.",
+  "errors": [
+    {"index": 0, "field": "title", "error": "This field is required."},
+    {"index": 1, "field": "category", "error": "'Foo' is not a valid category. Valid options: Action Item, Creative, GTM Calendar, Test & Learn"}
+  ]
+}
+```
+
+### 403 Forbidden (invalid or missing API key)
+
+Returned automatically when the `l5key` header is missing or does not match any active client.
+
+---
+
+## What happens after intake
+
+1. Items land in the **PMT Queue** with `intake_source = "cassidy"` and `queue_status = "pending"`.
+2. A team member views the Cassidy queue tab in the PMT Queue dashboard.
+3. They click the checkmark to **accept** (opens a form to fill remaining fields) or the X to **reject** (soft-deletes with audit trail).
+4. Accepted items move to the main PMT with `status = "Planned"`.
