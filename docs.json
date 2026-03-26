@@ -75,6 +75,12 @@
               "attribution/current-process",
               "attribution/revenue-reporting"
             ]
+          },
+          {
+            "group": "Notes / PMT",
+            "pages": [
+              "notes/cassidy-queue-intake-endpoint"
+            ]
           }
         ]
       },
