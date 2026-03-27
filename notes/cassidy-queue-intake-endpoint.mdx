@@ -49,7 +49,7 @@ Send a single JSON object or an array of objects (max 100 per request).
 | `media_source` | string | Channel or platform (e.g. `"Meta"`, `"Google Ads"`). |
 | `campaign` | string | Campaign name if relevant. |
 | `ads` | string | Ad name if relevant. |
-| `on_it_id` | integer | User ID of the assignee. |
+| `on_it_id` | integer or string | Assignee — pass a user ID (integer) or an email address (string). Emails are resolved to user IDs automatically. Returns a `400` error if the user is not found. |
 
 #### Optional — Categorization
 
