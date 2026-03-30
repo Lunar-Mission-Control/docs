@@ -1,0 +1,74 @@
+---
+title: "Lunar Interns"
+description: "AI-powered coding agents that pick up Linear tickets, write code, open PRs, and respond to review feedback — fully automated."
+icon: "robot"
+---
+
+# Lunar Interns
+
+Lunar Interns is an agent generation system that spins up autonomous AI coding agents on demand. Each intern is a fully isolated virtual machine running:
+
+- **Claude Code CLI** — the AI coding engine (uses your Claude Team subscription, no API tokens)
+- **OpenClaw** — AI gateway connecting Slack, webhooks, and agent sessions
+- **Full dev stack** — Django backend, Angular frontend, Postgres, Redis
+- **Cloudflare Tunnel** — persistent, password-protected URLs
+
+## How It Works
+
+```mermaid
+graph LR
+    A[Linear Ticket] -->|Tagged with intern label| B[Cron Poll]
+    B --> C[Haiku Orchestrator]
+    C --> D[Claude Code CLI]
+    D --> E[Git Branch + Implement]
+    E --> F[Push + Open PR]
+    F --> G[Slack Announcement]
+    G --> H[PR Review Comments]
+    H --> I[Claude Addresses Feedback]
+    I --> F
+```
+
+<CardGroup cols={2}>
+  <Card title="Spawn an Intern" icon="plus" href="/lunar-interns/spawning">
+    Create a new agent instance from the dashboard or CLI
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/lunar-interns/architecture">
+    How the system is built — VMs, tunnels, services
+  </Card>
+  <Card title="Workflow" icon="arrows-spin" href="/lunar-interns/workflow">
+    Linear → Code → PR → Review → Merge lifecycle
+  </Card>
+  <Card title="Dashboard" icon="chart-mixed" href="/lunar-interns/dashboard">
+    Monitor agents, tasks, PRs, and activity in real time
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+<Steps>
+  <Step title="Spawn from Dashboard">
+    Go to the [Intern Dashboard](https://intern-dashboard-blush.vercel.app), click **Spawn Intern**, enter a name.
+  </Step>
+  <Step title="Wait for Provisioning">
+    The agent boots in ~5 minutes. You'll see a Slack message when it's ready.
+  </Step>
+  <Step title="Create a Linear Ticket">
+    Create an issue in Linear and tag it with `intern:<name>`. The agent picks it up within 5 minutes.
+  </Step>
+  <Step title="Review the PR">
+    The agent opens PRs on GitHub. Leave review comments and it addresses them automatically.
+  </Step>
+</Steps>
+
+## What Each Intern Gets
+
+| Resource | Details |
+|---|---|
+| **Slack Channel** | `#intern-<name>` (private) |
+| **Dashboard** | `https://<name>.lunarintern.com` |
+| **API** | `https://api-<name>.lunarintern.com` |
+| **Frontend** | `https://app-<name>.lunarintern.com` |
+| **Linear Label** | `intern:<name>` |
+| **Supabase** | Registered with status tracking |
+| **Claude CLI** | Authenticated on Lunar Solar Group team |
+| **GitHub** | Authenticated, can push to Lunar-Mission-Control org |

@@ -1,0 +1,130 @@
+---
+title: "Workflow"
+description: "The complete lifecycle: Linear ticket → code → PR → review → merge."
+icon: "arrows-spin"
+---
+
+# Agent Workflow
+
+Interns operate on an automated cycle: poll Linear for work, implement changes, open PRs, and respond to review feedback.
+
+## Linear → Code → PR
+
+<Steps>
+  <Step title="Create a Linear Ticket">
+    Create an issue in [Linear](https://linear.app) on the **Mission Control** team. Tag it with the intern's label (e.g., `intern:golf`).
+
+    The description should clearly state:
+    - What needs to change
+    - Which repos are affected (`layerfivecore`, `l5ui`, `docs`)
+    - Acceptance criteria
+  </Step>
+  <Step title="Agent Picks Up the Ticket (≤5 min)">
+    The `linear-poll` cron runs every 5 minutes. When it finds a new issue:
+    1. Announces in Slack: `🚀 Starting MC-XXX: <title>`
+    2. Registers the task in Supabase
+    3. Moves the issue to **In Progress** in Linear
+    4. Resets repos to the default branch
+  </Step>
+  <Step title="Claude Code Implements">
+    The orchestrator dispatches Claude Code CLI with full tool access:
+    - Creates a feature branch: `feature/mc-xxx-short-description`
+    - Reads the codebase to understand patterns
+    - Implements the changes
+    - Commits with messages referencing the Linear issue
+    - Pushes to GitHub
+    - Opens PRs via `gh pr create`
+  </Step>
+  <Step title="Results Announced">
+    After implementation:
+    - PRs registered in Supabase
+    - Linear issue commented with PR links
+    - Slack announcement: `✅ Finished MC-XXX: PRs opened`
+    - Live preview rebuilt (Angular + Django)
+  </Step>
+</Steps>
+
+## PR Review Cycle
+
+<Steps>
+  <Step title="Leave a Review Comment">
+    Review the PR on GitHub. Leave inline comments on specific lines or top-level review comments.
+
+    <Tip>
+      The agent detects **inline comments**, **review comments**, and **top-level PR comments** from humans. It automatically filters out bot comments (Linear, Claude, GitHub Actions).
+    </Tip>
+  </Step>
+  <Step title="Agent Addresses Feedback (≤10 min)">
+    The `pr-review` cron runs every 10 minutes. When it finds new human comments:
+    1. Announces in Slack: `📝 Addressing review on l5ui#123`
+    2. Dispatches Claude Code CLI to make the changes
+    3. Commits: `[MC-XXX] Address review feedback`
+    4. Pushes to the same branch (PR auto-updates)
+    5. Replies on the PR with a summary
+    6. Rebuilds the live preview
+    7. Announces: `✅ Updated l5ui#123`
+  </Step>
+  <Step title="Merge When Ready">
+    Once satisfied, merge the PR. The agent detects merged PRs and:
+    - Marks the task as **completed** in Supabase
+    - Frees capacity to pick up new work
+  </Step>
+</Steps>
+
+## Capacity
+
+Each intern handles **one ticket at a time**. It won't pick up new work until all PRs from the current ticket are merged or closed.
+
+```
+work-can-take → "yes" (0/1 active)
+  ↓ picks up ticket
+work-can-take → "no" (1/1 active)
+  ↓ PRs merged
+work-check-merged → frees capacity
+work-can-take → "yes" (0/1 active)
+```
+
+## Cron Jobs
+
+| Cron | Interval | What It Does |
+|---|---|---|
+| `linear-poll` | Every 5 min | Checks Linear for new tagged issues, dispatches Claude |
+| `pr-review` | Every 10 min | Checks open PRs for review comments, dispatches fixes |
+
+Both run as OpenClaw crons using **Claude Haiku** for orchestration (checking APIs, reading comments) and **Claude Code CLI** for actual coding work.
+
+## Repos
+
+The agent works across three repositories in the `Lunar-Mission-Control` org:
+
+| Repo | Type | Purpose |
+|---|---|---|
+| `layerfivecore` | Django (Python) | Backend API |
+| `l5ui` | Angular (TypeScript) | Frontend app |
+| `docs` | MDX (Mintlify) | Documentation |
+
+After pushing code, the agent automatically rebuilds the live preview:
+- `l5ui` changes → Angular rebuild + Nginx restart
+- `layerfivecore` changes → Django restart
+
+## Example Ticket
+
+A good ticket for an intern:
+
+```markdown
+Title: Add console.log to login component
+
+Description:
+Add one line to the login component in l5ui.
+
+File: src/app/components/login/login.component.ts
+
+Add at the top of ngOnInit:
+console.log("Login loaded")
+
+One line. One file. One repo (l5ui).
+```
+
+<Warning>
+  Start with small, well-defined tickets. The agent works best with clear requirements and specific file references. As you build confidence, you can assign larger features that span multiple repos.
+</Warning>

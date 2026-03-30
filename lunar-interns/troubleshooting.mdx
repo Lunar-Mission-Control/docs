@@ -1,0 +1,154 @@
+---
+title: "Troubleshooting"
+description: "Common issues and how to fix them."
+icon: "bug"
+---
+
+# Troubleshooting
+
+## Agent Not Picking Up Tickets
+
+<AccordionGroup>
+  <Accordion title="Check the Linear label">
+    Make sure the ticket is tagged with `intern:<name>` (not `agent:<name>`). The label must match exactly.
+
+    Verify the label exists:
+    ```bash
+    /home/agent/tools/linear-check
+    ```
+  </Accordion>
+  <Accordion title="Check agent capacity">
+    The agent only handles one ticket at a time. Check if it's already busy:
+    ```bash
+    /home/agent/tools/work-can-take
+    ```
+    If busy, wait for current PRs to merge or manually free it in Supabase.
+  </Accordion>
+  <Accordion title="Check cron is running">
+    ```bash
+    su - agent -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); openclaw cron list"
+    ```
+    You should see `linear-poll` running every 5m. If missing, crons weren't set up during boot.
+  </Accordion>
+  <Accordion title="Check the ticket status">
+    The cron only picks up issues with state type `unstarted` or `backlog`. If the ticket is already **In Progress**, the agent skips it. Move it back to **Open** in Linear.
+  </Accordion>
+</AccordionGroup>
+
+## PR Review Comments Not Detected
+
+<AccordionGroup>
+  <Accordion title="Check comment type">
+    The agent detects:
+    - ✅ Inline review comments (on specific lines)
+    - ✅ Top-level PR comments
+    - ✅ Review body text (with change requests)
+
+    It ignores:
+    - ❌ Bot comments (Linear, Claude, GitHub Actions)
+    - ❌ Approvals (APPROVED state)
+    - ❌ Empty review bodies
+  </Accordion>
+  <Accordion title="Timestamp mismatch">
+    If `last_comment_seen_at` in Supabase is ahead of the comment timestamp, the comment is skipped. Reset it:
+    ```sql
+    UPDATE pull_requests SET last_comment_seen_at = NULL
+    WHERE repo = 'l5ui' AND pr_number = 123;
+    ```
+  </Accordion>
+  <Accordion title="Check the tool directly">
+    ```bash
+    /home/agent/tools/gh-pr-comments l5ui 123
+    ```
+    Should return `new_comments` array with your comment.
+  </Accordion>
+</AccordionGroup>
+
+## Claude CLI Not Authenticated
+
+The snapshot includes Claude auth, but if it expires:
+
+1. Check status:
+   ```bash
+   su - agent -c "claude auth status"
+   ```
+
+2. If `loggedIn: false`, the agent posts SSH instructions to Slack. Or SSH in directly:
+   ```bash
+   ssh -i ~/.ssh/id_rsa root@<server_ip>
+   su - agent
+   cd /home/agent/.openclaw/workspace
+   claude
+   ```
+   Go through the login flow in the interactive TUI.
+
+## Frontend Not Updating After Code Changes
+
+The agent should rebuild automatically, but if it doesn't:
+
+```bash
+ssh -i ~/.ssh/id_rsa root@<server_ip>
+/home/agent/tools/rebuild-if-changed l5ui
+```
+
+This applies Angular budget + environment fixes and triggers a Docker build.
+
+## Dashboard Shows "502 Bad Gateway"
+
+<AccordionGroup>
+  <Accordion title="OpenClaw not running">
+    ```bash
+    su - agent -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); systemctl --user status openclaw-gateway.service"
+    ```
+    If inactive, restart:
+    ```bash
+    su - agent -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); openclaw gateway install --force; systemctl --user restart openclaw-gateway.service"
+    ```
+  </Accordion>
+  <Accordion title="Cloudflared not connected">
+    ```bash
+    systemctl status cloudflared
+    ```
+    If stale, restart:
+    ```bash
+    systemctl restart cloudflared
+    ```
+  </Accordion>
+  <Accordion title="Config validation error">
+    Check OpenClaw config:
+    ```bash
+    su - agent -c "openclaw doctor"
+    ```
+    Common issue: Telegram config with `dmPolicy: allowlist` but no `allowFrom`. Fix: remove Telegram from the config.
+  </Accordion>
+</AccordionGroup>
+
+## Server Ran Out of Memory
+
+The CX33 has 8GB RAM + 4GB swap. Heavy operations (Angular build + Claude CLI simultaneously) can exhaust memory.
+
+Check:
+```bash
+free -h
+docker stats --no-stream
+```
+
+Solutions:
+- Wait for the Angular build to finish before triggering Claude
+- Upgrade to a larger server type
+- The `frontend-builder` container exits after building, freeing memory
+
+## SSH Access
+
+All servers use the same SSH key:
+
+```bash
+ssh -i ~/.ssh/id_rsa root@<server_ip>
+```
+
+Switch to agent user:
+```bash
+su - agent
+```
+
+Server IPs are shown in the dashboard agent detail view and in the Supabase `agents` table.
