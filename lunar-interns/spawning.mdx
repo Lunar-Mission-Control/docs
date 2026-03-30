@@ -1,0 +1,130 @@
+---
+title: "Spawning an Intern"
+description: "How to create a new agent instance — from the dashboard or CLI."
+icon: "plus"
+---
+
+# Spawning an Intern
+
+There are two ways to create a new intern: the **Dashboard** (recommended) or the **CLI**.
+
+## From the Dashboard
+
+<Steps>
+  <Step title="Open the Dashboard">
+    Go to [intern-dashboard-blush.vercel.app](https://intern-dashboard-blush.vercel.app) and sign in with your `@lunarsolargroup.com` Google account.
+  </Step>
+  <Step title="Click Spawn Intern">
+    Click the **Spawn Intern** button in the header. Enter a name (lowercase, alphanumeric, hyphens only).
+
+    The dialog shows a preview of what will be created:
+    - Slack: `#intern-<name>`
+    - URL: `<name>.lunarintern.com`
+    - API: `api-<name>.lunarintern.com`
+    - App: `app-<name>.lunarintern.com`
+  </Step>
+  <Step title="Wait for Provisioning">
+    The spawn takes ~5 minutes. You'll see the agent appear in the dashboard with status **provisioning**, then **ready**.
+
+    The intern's Slack channel will receive a message when it's online.
+  </Step>
+</Steps>
+
+<Warning>
+  Names must be unique. The dashboard checks for existing agents and shows an error if the name is taken.
+</Warning>
+
+## From the CLI
+
+```bash
+cd /path/to/agent-gen
+npm run spawn -- <name>
+```
+
+Example:
+```bash
+npm run spawn -- hotel
+```
+
+This runs the full spawn sequence:
+
+1. Creates private Slack channel `#intern-hotel`
+2. Creates Cloudflare tunnel + 3 DNS records
+3. Creates Linear label `intern:hotel`
+4. Registers agent in Supabase
+5. Generates cloud-init with all secrets
+6. Creates Hetzner VM from snapshot
+7. Waits for server to be ready
+8. Auto-approves OpenClaw device pairing
+
+### Output
+
+```
+====================================
+  Intern: hotel
+====================================
+
+  Server IP:     95.217.x.x
+  Dashboard:     https://hotel.lunarintern.com
+  API Backend:   https://api-hotel.lunarintern.com
+  App Frontend:  https://app-hotel.lunarintern.com
+  Password:      <random-32-byte-password>
+  Tunnel ID:     <uuid>
+  Slack:         #intern-hotel
+  Linear Label:  intern:hotel
+  Supabase ID:   <uuid>
+```
+
+## What Happens on Boot
+
+Cloud-init runs automatically and handles:
+
+<AccordionGroup>
+  <Accordion title="System Setup">
+    - Sets hostname to `intern-<name>`
+    - Activates swap (4GB)
+    - Starts Cloudflare tunnel
+    - Authenticates GitHub CLI
+  </Accordion>
+  <Accordion title="Repository Setup">
+    - Fetches latest code for `layerfivecore`, `l5ui`, `docs`
+    - Resets to default branch
+    - Applies Angular budget and environment fixes
+  </Accordion>
+  <Accordion title="Secrets & Config">
+    - Pulls backend `.env` from Cloudflare KV
+    - Generates Angular `environment.dev.ts` with instance URLs
+    - Writes OpenClaw config with Slack tokens, password, security settings
+  </Accordion>
+  <Accordion title="Docker Stack">
+    - Starts Postgres, Redis, Mailpit
+    - Runs Django migrations + seeds database
+    - Builds Angular frontend
+    - Starts Nginx to serve the app
+  </Accordion>
+  <Accordion title="OpenClaw & Crons">
+    - Installs and starts OpenClaw gateway
+    - Auto-approves device pairing
+    - Creates `linear-poll` cron (every 5 min)
+    - Creates `pr-review` cron (every 10 min)
+  </Accordion>
+</AccordionGroup>
+
+## Cost
+
+Each intern runs on a **Hetzner CX33** (4 vCPU, 8GB RAM, 80GB disk):
+
+| Resource | Cost |
+|---|---|
+| Server (CX33, Helsinki) | ~€5.99/month |
+| Cloudflare Tunnel | Free |
+| Claude Code CLI | Included in Claude Team subscription |
+| Supabase | Pro plan (shared across all agents) |
+
+## Destroying an Intern
+
+```bash
+npm run destroy -- <name>
+```
+
+This deletes the Hetzner server and Cloudflare tunnel + DNS records. The Linear label is preserved for audit trail.

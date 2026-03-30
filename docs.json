@@ -60,6 +60,18 @@
             ]
           },
           {
+            "group": "Lunar Interns",
+            "pages": [
+              "lunar-interns/overview",
+              "lunar-interns/spawning",
+              "lunar-interns/workflow",
+              "lunar-interns/architecture",
+              "lunar-interns/dashboard",
+              "lunar-interns/tools",
+              "lunar-interns/troubleshooting"
+            ]
+          },
+          {
             "group": "Performance Reports",
             "pages": [
               "mission-control/performance-reports",

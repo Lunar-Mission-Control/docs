@@ -1,0 +1,95 @@
+---
+title: "Agent Tools"
+description: "The 18 shell tools available to each intern for Linear, GitHub, Slack, Supabase, and git operations."
+icon: "wrench"
+---
+
+# Agent Tools
+
+Each intern has 18 shell tools at `/home/agent/tools/` that handle integrations with external services. All tools are identity-aware — they read the agent's name, label, and signature from `/home/agent/state/identity.json`.
+
+## Linear
+
+| Tool | Usage | Description |
+|---|---|---|
+| `linear-check` | `linear-check` | Queries Linear for issues tagged with this intern's label. Returns JSON with issue details. |
+| `linear-start` | `linear-start <issue_id>` | Moves a Linear issue to **In Progress**. |
+| `linear-comment` | `linear-comment <issue_id> "body"` | Adds a comment to a Linear issue. Auto-signs with the intern's signature. |
+
+## GitHub
+
+| Tool | Usage | Description |
+|---|---|---|
+| `gh-my-prs` | `gh-my-prs` | Lists this intern's active open PRs from Supabase. |
+| `gh-pr-comments` | `gh-pr-comments <repo> <pr_num>` | Gets new human comments on a PR (filters out bots, handles inline + review + top-level). Normalizes timestamps. |
+| `gh-pr-comments-ack` | `gh-pr-comments-ack <repo> <pr_num>` | Marks PR comments as seen in Supabase (prevents re-processing). |
+
+## Slack
+
+| Tool | Usage | Description |
+|---|---|---|
+| `slack-send` | `slack-send <channel_id> "text"` | Sends a message to Slack. Auto-prefixes with `[intern-<name>]`. |
+
+## Supabase State
+
+| Tool | Usage | Description |
+|---|---|---|
+| `whoami` | `whoami` | Returns the agent's full profile from Supabase (name, status, capacity, etc.). |
+| `work-can-take` | `work-can-take` | Checks if the intern can accept new work (compares active tasks vs max capacity). Returns `yes` or `no`. |
+| `work-start` | `work-start <linear_id> <identifier> <title> <desc>` | Registers a new task in Supabase, sets agent status to `busy`. |
+| `work-add-pr` | `work-add-pr <repo> <pr_num> <url> <branch> <identifier> <title>` | Tracks a new PR in Supabase, linked to the active task. |
+| `work-check-merged` | `work-check-merged` | Checks GitHub for merged/closed PRs, updates Supabase. Frees agent capacity when all PRs for a task are merged. |
+| `log-activity` | `log-activity <action> '<json_details>'` | Writes to the activity log in Supabase. |
+| `heartbeat` | `heartbeat` | Updates `last_heartbeat` timestamp in Supabase. |
+
+## Git
+
+| Tool | Usage | Description |
+|---|---|---|
+| `git-reset-all` | `git-reset-all` | Hard resets all repos to their default branch (`main` or `master`, auto-detected). Also reapplies Angular budget and environment fixes. |
+
+## Build
+
+| Tool | Usage | Description |
+|---|---|---|
+| `rebuild-if-changed` | `rebuild-if-changed [l5ui\|layerfivecore\|both]` | Rebuilds the live preview. Applies Angular fixes, runs Docker build, restarts nginx/Django. Auto-elevates to `agent` user if called as root. |
+
+## Claude Auth
+
+| Tool | Usage | Description |
+|---|---|---|
+| `claude-auth` | `claude-auth check` | Checks if Claude CLI is authenticated. Alerts Slack with SSH instructions if not. |
+
+## How Tools Work
+
+All tools read secrets from environment files:
+
+```
+/home/agent/.env-agent-name    → intern name
+/home/agent/.env-supabase-url  → Supabase REST URL
+/home/agent/.env-supabase-key  → service_role key
+/home/agent/.env-linear-key    → Linear API key
+/home/agent/.env-slack-token   → Slack bot token
+/home/agent/.env-github        → GitHub PAT
+/home/agent/.env-cf-token      → Cloudflare API token
+/home/agent/.env-cf-account    → Cloudflare account ID
+```
+
+Identity is read from:
+```
+/home/agent/state/identity.json
+```
+
+```json
+{
+  "name": "intern-golf",
+  "label": "intern:golf",
+  "signature": "— intern-golf",
+  "git_user": "intern-golf",
+  "git_email": "intern-golf@lunarsolargroup.com",
+  "slack_channel": "C0AP5ELSCJK",
+  "repos": ["layerfivecore", "l5ui", "docs"],
+  "org": "Lunar-Mission-Control",
+  "max_active_tickets": 1
+}
+```

@@ -1,0 +1,105 @@
+---
+title: "Dashboard"
+description: "Monitor agents, tasks, PRs, and activity in real time."
+icon: "chart-mixed"
+---
+
+# Intern Dashboard
+
+The [Lunar Interns Dashboard](https://intern-dashboard-blush.vercel.app) provides real-time visibility into all agent instances, their work, and activity.
+
+**URL**: [intern-dashboard-blush.vercel.app](https://intern-dashboard-blush.vercel.app)
+
+## Authentication
+
+Sign in with your `@lunarsolargroup.com` Google account. Only LSG email addresses are allowed — enforced at both the OAuth and application level.
+
+## Overview
+
+The main dashboard shows four stat cards:
+
+| Stat | Description |
+|---|---|
+| **Total Interns** | Number of spawned agents (with busy count) |
+| **Active Tasks** | In-progress Linear tickets (with completed count) |
+| **Open PRs** | PRs waiting for review (with merged count) |
+| **Activity (24h)** | Actions logged in the last 24 hours |
+
+## Tabs
+
+### Interns
+
+Grid of agent cards showing:
+
+- **Status indicator** — green (ready), amber (busy), blue (provisioning), red (error)
+- **Current ticket** — the Linear issue being worked on
+- **Slack channel** — linked to the agent's private channel
+- **Last heartbeat** — when the agent last checked in
+- **Capacity bar** — active tasks vs max capacity
+
+**Filters**: Click status pills to filter by Ready, Busy, Provisioning, Error, Offline.
+
+**Click** any agent card to open the detail view.
+
+### Tasks
+
+Table of all Linear tickets assigned to agents:
+
+| Column | Description |
+|---|---|
+| Status | Queued, In Progress, Review, Completed, Failed |
+| Issue | Linear identifier (e.g., MC-939) |
+| Title | Issue title |
+| Agent | Which intern is working on it |
+| Branch | Git branch name |
+| Started | When work began |
+
+### Pull Requests
+
+Table of all PRs created by agents:
+
+| Column | Description |
+|---|---|
+| Status | Open, Changes Requested, Approved, Merged, Closed |
+| Repo | Repository name |
+| PR | Link to GitHub PR |
+| Title | PR title |
+| Branch | Feature branch |
+| Created | When the PR was opened |
+
+### Activity
+
+Two visualizations plus a feed:
+
+- **Bar chart** — 7-day activity histogram
+- **Donut chart** — agent status distribution
+- **Activity feed** — real-time log with action-specific icons
+
+Activity types: `spawned`, `task_started`, `task_implemented`, `review_addressed`, `error`
+
+## Agent Detail View
+
+Click an agent card to see its full profile:
+
+- **Info panel** — hostname, dashboard URL, Slack channel, Linear label, server IP, capacity
+- **Tasks table** — all tickets assigned to this agent (active + completed)
+- **Pull Requests table** — all PRs opened by this agent
+- **Activity feed** — agent-specific activity log
+
+All data updates in real time via Supabase Realtime subscriptions.
+
+## Spawn from Dashboard
+
+Click **Spawn Intern** in the header to create a new agent. See [Spawning](/lunar-interns/spawning) for details.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Vue 3 + TypeScript |
+| UI | ShadCN-Vue + Tailwind CSS |
+| Charts | Chart.js + vue-chartjs |
+| Auth | Supabase Auth + Google OAuth |
+| Data | Supabase (Postgres) + Realtime |
+| Hosting | Vercel |
+| Spawn API | Supabase Edge Functions |
