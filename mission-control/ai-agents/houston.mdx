@@ -1,0 +1,155 @@
+---
+title: "Houston"
+description: "Mission analytics copilot — reports, dashboards, metrics, and channel performance"
+icon: "satellite"
+---
+
+Houston is the default agent and the primary entry point for all analytics work in Mission Control. It has the broadest tool set and handles everything from pulling channel metrics to building custom reports and dashboards.
+
+## Capabilities
+
+<AccordionGroup>
+  <Accordion title="Channel performance" icon="chart-line">
+    Pull metrics across all connected ad platforms. Compare ROAS, spend, CPC, CPM, and more across channels, campaigns, and time periods.
+
+    **Tools used**: `get_channel_overview`, `get_performance_by_day`, `get_channel_metrics`, `get_channel_campaigns`, `get_channel_attribution`
+  </Accordion>
+
+  <Accordion title="Reports" icon="file-lines">
+    List existing reports, inspect their data, discover available sources and metrics, and create new custom reports with specific metrics and time dimensions.
+
+    **Tools used**: `list_reports`, `view_report_data`, `get_report_categories`, `get_report_sources`, `get_report_metrics`, `create_report`
+  </Accordion>
+
+  <Accordion title="Dashboards" icon="gauge-high">
+    List dashboards, view dashboard data with all widgets, and create new dashboards with selected metrics.
+
+    **Tools used**: `list_dashboards`, `get_dashboard_details`, `create_dashboard`, `get_all_dashboard_metrics`
+  </Accordion>
+
+  <Accordion title="Custom metrics" icon="calculator">
+    Create custom calculated metrics (formulas like MER, nCAC, Total Ad Spend) or manual-entry metrics, and set their values. List all existing custom metrics.
+
+    **Tools used**: `list_custom_metrics`, `create_custom_metric`, `set_custom_metric_value`
+  </Accordion>
+
+  <Accordion title="Notes" icon="sticky-note">
+    Create and list notes for tracking observations, follow-ups, and team communication.
+
+    **Tools used**: `list_notes`, `create_note`
+  </Accordion>
+
+  <Accordion title="Outlier detection" icon="triangle-exclamation">
+    Review detected outliers — unusual performance spikes or drops across channels. See individual occurrences or list all recent outlier events.
+
+    **Tools used**: `get_outlier_occurrence`, `list_outlier_occurrences`
+  </Accordion>
+
+  <Accordion title="Visualizations" icon="chart-pie">
+    Generate charts and graphs from data. Houston picks the best chart type for the data or you can specify (bar, line, pie, etc.).
+
+    **Tools used**: `create_visualization`
+  </Accordion>
+
+  <Accordion title="Sales & marketing dashboards" icon="store">
+    Pull pre-built sales and marketing dashboard data including revenue, orders, conversion rates, and funnel metrics.
+
+    **Tools used**: `get_sales_dashboard`, `get_marketing_dashboard`
+  </Accordion>
+
+  <Accordion title="Customer search" icon="magnifying-glass">
+    Search for customers by name, email, or other identifiers across the customer database.
+
+    **Tools used**: `search_customers`
+  </Accordion>
+</AccordionGroup>
+
+## Tool reference
+
+### Core tools
+
+| Tool | Description |
+|------|-------------|
+| `get_channel_overview` | High-level performance summary across all connected channels |
+| `get_performance_by_day` | Daily performance breakdown for a specific channel and date range |
+| `search_customers` | Search customers by name, email, or identifier |
+
+### Channel tools
+
+| Tool | Description |
+|------|-------------|
+| `get_channel_metrics` | Detailed metrics for a specific channel (spend, revenue, ROAS, CPC, etc.) |
+| `get_channel_campaigns` | Campaign-level breakdown for a channel |
+| `get_channel_attribution` | Attribution data showing which channels drive conversions |
+| `get_sales_dashboard` | Pre-built sales dashboard with revenue and order metrics |
+| `get_marketing_dashboard` | Pre-built marketing dashboard with spend and efficiency metrics |
+
+### Report tools
+
+| Tool | Description |
+|------|-------------|
+| `list_reports` | List all saved custom reports |
+| `view_report_data` | Fetch and display data from a saved report |
+| `get_report_categories` | Get available report categories for filtering sources |
+| `get_report_sources` | Get available data sources (Facebook Ads, Google Ads, Shopify, etc.) |
+| `get_report_metrics` | Get available metrics for selected sources |
+| `create_report` | Create and save a new custom report with selected sources and metrics |
+
+### Dashboard tools
+
+| Tool | Description |
+|------|-------------|
+| `list_dashboards` | List all custom dashboards |
+| `get_dashboard_details` | Get full dashboard data including all widgets |
+| `create_dashboard` | Create a new custom dashboard |
+| `get_all_dashboard_metrics` | Get all metrics available for dashboard widgets |
+
+### Custom metric tools
+
+| Tool | Description |
+|------|-------------|
+| `list_custom_metrics` | List all custom metrics with formulas and configuration |
+| `create_custom_metric` | Create a new custom metric (formula or manual entry) |
+| `set_custom_metric_value` | Set values for manual-entry custom metrics by date |
+
+### Note tools
+
+| Tool | Description |
+|------|-------------|
+| `list_notes` | List recent notes |
+| `create_note` | Create a new note with title and content |
+
+### Outlier tools
+
+| Tool | Description |
+|------|-------------|
+| `get_outlier_occurrence` | Get details of a specific outlier event |
+| `list_outlier_occurrences` | List all recent outlier detections |
+
+### Visualization tools
+
+| Tool | Description |
+|------|-------------|
+| `create_visualization` | Generate a chart from structured data (bar, line, pie, scatter, etc.) |
+
+## Example prompts
+
+```
+Show me my top performing channels with ROAS and spend
+```
+
+```
+Create a report with spend, revenue, and ROAS for all my channels
+```
+
+```
+What are my custom metrics?
+```
+
+```
+Visualize my spend vs revenue across all channels this month
+```
+
+```
+Show me my Facebook Ads campaigns and their performance
+```

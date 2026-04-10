@@ -1,0 +1,72 @@
+---
+title: "AI Agents Overview"
+description: "Mission Control's multi-agent AI system — architecture, agents, and capabilities"
+icon: "brain-circuit"
+---
+
+Mission Control uses a multi-agent AI system powered by Anthropic's Claude. Each agent specializes in a specific domain and can hand off conversations to the right specialist automatically.
+
+## Architecture
+
+The system is built on [LangGraph Swarm](https://langchain-ai.github.io/langgraph/), which orchestrates multiple agents in a shared conversation. Each agent has:
+
+- **Specialized tools** — functions it can call to fetch data, create resources, or perform analysis
+- **A system prompt** — instructions that define its personality, expertise, and behavior rules
+- **Handoff tools** — the ability to transfer a conversation to another agent when a request falls outside its domain
+
+<Info>
+  All agents share the same underlying LLM (Claude) but operate with different tool sets and instructions. This means each agent has deep capability in its area while staying focused.
+</Info>
+
+## Agents
+
+<CardGroup cols={3}>
+  <Card title="Houston" icon="satellite" color="#a855f7">
+    **Mission analytics copilot**
+
+    The default agent. Handles channel metrics, reports, dashboards, notes, outliers, custom metrics, and visualizations. If you're not sure which agent to talk to, start with Houston.
+  </Card>
+
+  <Card title="Space Bob" icon="palette" color="#ec4899">
+    **Creative analysis & ad copywriting**
+
+    Analyzes creative performance, runs A/B tests, generates ad copy, saves creative reports, and connects to Creative Studio for visual exports.
+  </Card>
+
+  <Card title="Social Sally" icon="shield-halved" color="#f97316">
+    **Paid media monitoring & troubleshooting**
+
+    Scans ad accounts for inactivity, checks creative thresholds, audits landing page funnels, and diagnoses performance drops with guided step-by-step flows.
+  </Card>
+</CardGroup>
+
+## How handoffs work
+
+When you ask a question that belongs to a different agent, the current agent automatically transfers the conversation. For example:
+
+- Ask Houston about creative performance → transfers to **Space Bob**
+- Ask Space Bob about account monitoring → transfers to **Social Sally**
+- Ask Social Sally about building a report → transfers to **Houston**
+
+The handoff is seamless — the receiving agent picks up the full conversation context and responds directly.
+
+## Guided flows
+
+Some agents use **guided conversation flows** with clickable button prompts. When you ask Space Bob to analyze creatives or Social Sally to run a scan, they walk you through setup step by step:
+
+1. The agent calls a setup tool that returns questions with button options
+2. You click a button or type your answer
+3. The agent presents the next question with new buttons
+4. After all questions are answered, you confirm and the agent runs the analysis
+
+<Tip>
+  **Shortcut**: If you already know what you want, include all the details upfront. For example: "Show me top Facebook Ads creatives by ROAS for the last 30 days." The agent will skip the guided flow and run immediately.
+</Tip>
+
+## Suggested prompts
+
+Each agent shows tailored starter prompts when you open a new conversation. These are designed to showcase the agent's key capabilities and help you get started quickly.
+
+## Access
+
+Houston is currently available to superusers and users with role IDs 11, 12, 13, and 14. The chat button appears as a floating icon in the bottom-right corner of the dashboard.
