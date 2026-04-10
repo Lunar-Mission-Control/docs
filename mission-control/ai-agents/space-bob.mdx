@@ -1,0 +1,179 @@
+---
+title: "Space Bob"
+description: "Creative analysis, A/B testing, ad copywriting, and Creative Studio integration"
+icon: "palette"
+---
+
+Space Bob is the creative specialist. It analyzes ad creative performance, compares variants, generates ad copy, manages creative reports, and connects to Creative Studio for visual exports.
+
+## Capabilities
+
+<AccordionGroup>
+  <Accordion title="Creative performance analysis" icon="ranking-star">
+    Pull top-performing creatives ranked by spend, ROAS, CPA, or CTR. Group by creative asset, ad name, headline, copy text, or landing page. Results render as visual cards in the chat with images and key metrics.
+
+    **Tools used**: `get_creative_performance`, `get_creative_insights`
+  </Accordion>
+
+  <Accordion title="A/B test comparison" icon="code-compare">
+    Compare creative variants side by side. Filter to specific ad names or groups and see how they stack up across all metrics. Useful for evaluating test results and deciding what to scale.
+
+    **Tools used**: `analyze_creative_ab_test`
+  </Accordion>
+
+  <Accordion title="Visual creative analysis" icon="eye">
+    When you share an image of a creative, Space Bob analyzes it visually:
+    - **Visual hook** — what grabs attention in the first 1-3 seconds
+    - **Emotional appeal** — what emotion the creative triggers
+    - **CTA clarity** — whether the call-to-action is clear and compelling
+    - **Audience signals** — who the creative targets and how
+    - **Product presentation** — how the product/service is showcased
+    - **Design elements** — color psychology, typography, composition
+
+    Every observation is connected to the performance metrics.
+  </Accordion>
+
+  <Accordion title="Ad copywriting" icon="pen-nib">
+    Generate high-performing ad copy using the Cassidy AI writing assistant. Provide an ad name, performance context, and desired tone — Space Bob sends it to Cassidy and returns polished copy with references.
+
+    **Tools used**: `write_ad_copy`
+
+    <Info>
+      Requires Cassidy AI configuration (assistant ID and API key) in ChatBot Settings.
+    </Info>
+  </Accordion>
+
+  <Accordion title="Creative reports" icon="bookmark">
+    Save, list, and reload creative analyses as named reports. All filters, date ranges, and groupings are preserved. Loading a saved report re-runs the analysis with the exact saved parameters.
+
+    **Tools used**: `list_creative_reports`, `load_creative_report`, `save_creative_report`
+  </Accordion>
+
+  <Accordion title="Creative Studio" icon="photo-film">
+    After pulling creative performance data, Space Bob includes an **Open in Creative Studio** link. This navigates to the full Creative Reporting page with filters pre-applied and auto-opens the Creative Studio dialog for:
+    - Exporting cards as PNG, JPEG, or animated GIF
+    - Customizing grid layout, colors, and typography
+    - Selecting which metrics to highlight on each card
+    - Adjusting scale and background for presentations
+
+    **Tools used**: `creative_studio_link` (included in all creative tool responses)
+  </Accordion>
+
+  <Accordion title="Guided setup flow" icon="list-check">
+    When you ask Space Bob to analyze creatives, it walks you through setup with clickable buttons:
+
+    1. **Which platform?** — Facebook Ads, Google Ads, TikTok Ads
+    2. **What time period?** — 7, 14, 30, or 90 days
+    3. **How to group?** — Ad Name, Creative, Headline, Copy, Landing Page
+    4. **What to focus on?** — ROAS, Spend, CPA, CTR
+    5. **Confirm and run**
+
+    **Tools used**: `gather_creative_params`
+  </Accordion>
+
+  <Accordion title="Visualizations" icon="chart-bar">
+    Generate charts from creative data — compare spend across creatives, visualize ROAS distribution, etc.
+
+    **Tools used**: `create_visualization`
+  </Accordion>
+</AccordionGroup>
+
+## Tool reference
+
+### Creative analysis tools
+
+| Tool | Description |
+|------|-------------|
+| `get_creative_performance` | Top-performing creatives ranked by performance metrics. Returns visual cards with images. |
+| `analyze_creative_ab_test` | Compare creative variants side by side with full metric breakdown |
+| `get_creative_insights` | Strategic insights — top/bottom performers, best ROAS, best CTR, lowest CPA |
+| `gather_creative_params` | Guided setup — returns platform options, date ranges, and grouping choices with buttons |
+
+### Creative report tools
+
+| Tool | Description |
+|------|-------------|
+| `list_creative_reports` | List all saved creative reports with their configuration |
+| `load_creative_report` | Load a saved report and re-run the analysis with all saved filters. Supports date range overrides. |
+| `save_creative_report` | Save the current analysis as a named creative report |
+
+### Copywriting tools
+
+| Tool | Description |
+|------|-------------|
+| `write_ad_copy` | Generate ad copy via Cassidy AI with performance context and tone control |
+
+### Visualization tools
+
+| Tool | Description |
+|------|-------------|
+| `create_visualization` | Generate charts from creative performance data |
+
+## Creative insight rules
+
+Space Bob follows specific rules when analyzing creatives:
+
+<Steps>
+  <Step title="Connect visuals to metrics">
+    Every visual observation is tied to performance data. "The bold red CTA button likely drives the 2.3% CTR, significantly above the 1.1% average."
+  </Step>
+  <Step title="Explain why top performers work">
+    Don't just rank — explain what creative attributes drive performance.
+  </Step>
+  <Step title="Suggest A/B tests">
+    Recommend test ideas based on what's working. "Consider testing a version with a lifestyle image vs. this product-only shot."
+  </Step>
+  <Step title="Flag creative fatigue">
+    If a high-spend creative has declining CTR, call it out as potential fatigue.
+  </Step>
+  <Step title="Compare creative approaches">
+    Proactively compare formats. "Your video ads average 1.8x ROAS vs. 1.2x for static images."
+  </Step>
+</Steps>
+
+## Available metrics
+
+Creative analysis includes these performance metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `spend` | Total ad spend |
+| `revenue` | Total revenue attributed |
+| `roas` | Return on Ad Spend (revenue / spend) |
+| `cpa` | Cost Per Acquisition (spend / purchases) |
+| `ctr` | Click-Through Rate (clicks / impressions) |
+| `cpc` | Cost Per Click |
+| `cpm` | Cost Per 1,000 Impressions |
+| `purchases` | Total conversions/purchases |
+| `impressions` | Total ad impressions |
+| `clicks` | Total clicks |
+| `reach` | Unique users reached |
+| `frequency` | Average times each user saw the ad |
+| `aov` | Average Order Value |
+| `atc` | Add-to-Cart events |
+
+## Example prompts
+
+```
+Show me my top performing creatives by ROAS
+```
+
+```
+Run an A/B test analysis on my ad creatives
+```
+
+```
+Give me creative performance insights — what should I scale vs pause?
+```
+
+```
+Write new ad copy based on my best-performing creatives
+```
+
+```
+Show me my saved creative reports
+```
+
+```
+Load my St. Patrick's Day report
+```

@@ -51,6 +51,15 @@
             ]
           },
           {
+            "group": "AI Agents",
+            "pages": [
+              "mission-control/ai-agents/overview",
+              "mission-control/ai-agents/houston",
+              "mission-control/ai-agents/space-bob",
+              "mission-control/ai-agents/social-sally"
+            ]
+          },
+          {
             "group": "Development",
             "pages": [
               "mission-control/ai-development",

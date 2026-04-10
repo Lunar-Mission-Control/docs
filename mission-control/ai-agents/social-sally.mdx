@@ -1,0 +1,157 @@
+---
+title: "Social Sally"
+description: "Paid media monitoring, threshold checks, funnel audits, and performance troubleshooting"
+icon: "shield-halved"
+---
+
+Social Sally is a proactive paid media operations analyst. She specializes in monitoring ad accounts, flagging underperforming creatives, auditing landing page funnels, and diagnosing performance drops.
+
+## Capabilities
+
+<AccordionGroup>
+  <Accordion title="Account activity scanning" icon="clock-rotate-left">
+    Scan ad accounts for optimization activity and flag inactivity streaks. Shows the last known change date and days since last activity for each account.
+
+    **Guided questions**: Which accounts? → Lookback period? → Escalation threshold?
+
+    **Tools used**: `gather_scan_params` → `scan_account_change_activity`
+  </Accordion>
+
+  <Accordion title="Creative threshold checks" icon="bullseye">
+    Evaluate active Meta ads against CPA and ROAS targets. Flags underperformers that exceed cost thresholds or fail to meet return targets. Uses outlier targets configured for the client when available.
+
+    **Guided questions**: Lookback period? → Spend multiplier? → Target CPA?
+
+    **Tools used**: `gather_scan_params` → `check_meta_ad_thresholds`
+  </Accordion>
+
+  <Accordion title="Landing page funnel audits" icon="link">
+    Assess landing page destination diversification, funnel-stage alignment, and LP testing presence. URLs are auto-normalized to surface unique destinations.
+
+    **Guided questions**: Which accounts? → Funnel stages? → LP test keywords?
+
+    **Tools used**: `gather_scan_params` → `check_landing_page_funnel_alignment`
+  </Accordion>
+
+  <Accordion title="Performance drop diagnosis" icon="stethoscope">
+    Diagnose root causes of performance drops across the full funnel. Classifies issues into root-cause buckets with confidence levels.
+
+    **Guided questions**: Which platform? → Which account? → Comparison window?
+
+    **Tools used**: `gather_scan_params` → `diagnose_performance_drop`
+  </Accordion>
+
+  <Accordion title="Channel metrics" icon="chart-line">
+    Access the same channel performance tools as Houston for pulling spend, ROAS, and campaign data during troubleshooting.
+
+    **Tools used**: `get_channel_overview`, `get_performance_by_day`, `get_channel_metrics`, `get_channel_campaigns`, `get_channel_attribution`, `get_sales_dashboard`, `get_marketing_dashboard`
+  </Accordion>
+
+  <Accordion title="Notes" icon="sticky-note">
+    Create notes to track flagged items so the team can follow up on issues found during scans.
+
+    **Tools used**: `list_notes`, `create_note`
+  </Accordion>
+
+  <Accordion title="Visualizations" icon="chart-pie">
+    Generate charts to visualize scan results and performance trends.
+
+    **Tools used**: `create_visualization`
+  </Accordion>
+</AccordionGroup>
+
+## Guided conversation flow
+
+Social Sally uses a step-by-step guided flow for every scan. Here's how it works:
+
+<Steps>
+  <Step title="Determine the scan type">
+    Based on your request, Sally identifies the scan:
+    - **Ad threshold check** — `threshold_check`
+    - **Account activity scan** — `change_activity`
+    - **Landing page audit** — `funnel_alignment`
+    - **Performance diagnosis** — `performance_diagnosis`
+  </Step>
+
+  <Step title="Gather parameters">
+    Sally calls `gather_scan_params` which returns your available accounts, any configured metric targets, and the first question with clickable button options.
+  </Step>
+
+  <Step title="Walk through questions">
+    Each scan type has 2-4 questions. Sally presents them one at a time with buttons. You can click a button or type your answer.
+  </Step>
+
+  <Step title="Confirm and run">
+    After all questions are answered, Sally summarizes your settings and shows **Run scan** / **Start over** buttons. On confirmation, she runs the actual scan tool.
+  </Step>
+</Steps>
+
+<Tip>
+  If you provide all parameters upfront (e.g., "Run a threshold check with 14-day lookback and $40 CPA target"), Sally skips the guided flow and runs immediately.
+</Tip>
+
+## Tool reference
+
+### Scan tools
+
+| Tool | Description |
+|------|-------------|
+| `gather_scan_params` | Setup tool — returns accounts, targets, and guided questions with button options |
+| `scan_account_change_activity` | Scan accounts for optimization activity and inactivity streaks |
+| `check_meta_ad_thresholds` | Check active Meta ads against CPA/ROAS performance targets |
+| `check_landing_page_funnel_alignment` | Audit LP diversification, funnel alignment, and A/B test presence |
+| `diagnose_performance_drop` | Full-funnel diagnosis of performance drops with root-cause classification |
+
+### Channel tools
+
+| Tool | Description |
+|------|-------------|
+| `get_channel_overview` | High-level performance across all channels |
+| `get_performance_by_day` | Daily performance breakdown |
+| `get_channel_metrics` | Detailed channel metrics |
+| `get_channel_campaigns` | Campaign-level breakdown |
+| `get_channel_attribution` | Attribution data |
+| `get_sales_dashboard` | Sales dashboard metrics |
+| `get_marketing_dashboard` | Marketing dashboard metrics |
+
+### Support tools
+
+| Tool | Description |
+|------|-------------|
+| `list_notes` | List recent notes |
+| `create_note` | Create a follow-up note for flagged items |
+| `create_visualization` | Generate charts from scan results |
+
+## Reporting rules
+
+Social Sally follows strict operational guidelines:
+
+<Warning>
+  Sally will **never** recommend pausing ads when target CPA or conversion data is missing. She only flags issues she can verify with data.
+</Warning>
+
+- Results are sorted by severity/risk — most urgent findings first
+- Multi-account results are presented in dashboard-style markdown tables
+- Every flagged issue includes the account name/ID and key data points
+- Inactivity reports include the last known change date and days since
+- Funnel alignment reports auto-normalize URLs for unique destination counting
+- Performance diagnoses classify into root-cause buckets with confidence levels
+- Sally offers to create notes for flagged items so the team can track follow-up
+
+## Example prompts
+
+```
+Run an ad threshold check on my Meta ads
+```
+
+```
+Scan my accounts for recent change activity
+```
+
+```
+Run a landing page funnel alignment audit
+```
+
+```
+Help me diagnose a performance drop
+```
