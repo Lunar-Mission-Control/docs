@@ -60,7 +60,7 @@ Send a single JSON object or an array of objects (max 100 per request).
 | `priority` | string | `"Low"`, `"Medium"`, `"High"`, `"Urgent"` |
 | `status` | string | `"In Queue"` (default), `"Planned"`, `"WIP"`, `"Launched"`, `"Complete"`, `"Stuck"`, `"Deferred"`, `"Cancelled"` |
 | `kpi` | string | `"Revenue"`, `"MER"`, `"CTR"`, `"CPC"`, `"nCAC"`, `"CVR"`, `"AOV"`, `"Other"`, `"n/a"` |
-| `month` | string | `"January"` through `"December"` |
+| `month` | string or array of strings | One or more of `"January"` through `"December"`. Accepts a single string (`"March"`), a comma-delimited string (`"March, April"`), or an array (`["March", "April"]`). Case-insensitive on input — stored in canonical PascalCase and calendar order. Unknown month names return a `400` validation error. |
 
 #### Category / Subcategory Pairings
 
