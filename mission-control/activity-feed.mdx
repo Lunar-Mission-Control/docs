@@ -1,0 +1,82 @@
+---
+title: "Activity Feed"
+description: "Real-time activity feed showing recent user actions on the dashboard"
+icon: "rss"
+---
+
+# Activity Feed
+
+The Activity Feed component displays a real-time feed of recent user actions within Mission Control, including logins, page views, and form submissions.
+
+## Overview
+
+The Activity Feed provides visibility into how users interact with the platform. It is available on the dashboard and shows activity scoped to the authenticated client.
+
+## Features
+
+- **Real-time events** — Displays logins, page views, and form submissions
+- **Date range filtering** — Filter events by custom date ranges
+- **Pagination** — Server-side pagination for efficient data loading
+- **Permission-based access** — Respects module-level access permissions
+
+## Accessing the Activity Feed
+
+Navigate to **Activity Feed** from the dashboard sidebar, or visit `/activity-feed` directly.
+
+## API Endpoint
+
+The Activity Feed is powered by the following API endpoint:
+
+<Note>
+  Requires authentication via JWT bearer token.
+</Note>
+
+### GET /api/activity_feed/events/
+
+Returns a paginated list of activity events for the authenticated client.
+
+**Query Parameters:**
+
+| Parameter    | Type   | Default | Description                          |
+|-------------|--------|---------|--------------------------------------|
+| `start_date` | string | today   | Start date in `YYYY-MM-DD` format    |
+| `end_date`   | string | today   | End date in `YYYY-MM-DD` format      |
+| `page`       | int    | 1       | Page number                          |
+| `size`       | int    | 20      | Number of results per page           |
+
+**Response:**
+
+```json
+{
+  "responseCode": 200,
+  "responseData": {
+    "rows": [
+      {
+        "id": 1,
+        "user_name": "John Doe",
+        "email": "john@example.com",
+        "action": "Dashboard",
+        "page_url": "/dashboard",
+        "timestamp": "2025-03-28T14:30:00Z",
+        "client_name": "Acme Corp"
+      }
+    ]
+  },
+  "total": 150
+}
+```
+
+## Component Details
+
+The `ActivityFeed` component is an Angular feature module located at `src/app/components/activity-feed/`.
+
+### Files
+
+- `activity-feed.component.ts` — Main component with date filtering and pagination logic
+- `activity-feed.component.html` — Template with Material table and paginator
+- `activity-feed.component.scss` — Component styles
+- `activity-feed.module.ts` — Feature module declaration
+
+### Usage
+
+The component is lazy-loaded via the Angular router at the `/activity-feed` path.
