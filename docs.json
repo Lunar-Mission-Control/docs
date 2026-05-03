@@ -63,25 +63,25 @@
           {
             "group": "Agent Surface",
             "pages": [
-              "mission-control/agent-surface/overview",
-              "mission-control/agent-surface/automations",
-              "mission-control/agent-surface/agent-builder",
-              "mission-control/agent-surface/skills",
-              "mission-control/agent-surface/knowledge-bases",
-              "mission-control/agent-surface/permissions"
+              "agent-surface/overview",
+              "agent-surface/automations",
+              "agent-surface/agent-builder",
+              "agent-surface/skills",
+              "agent-surface/knowledge-bases",
+              "agent-surface/permissions"
             ]
           },
           {
             "group": "Creative Analytics",
             "pages": [
-              "mission-control/creative-analytics/overview",
-              "mission-control/creative-analytics/analytics-page",
-              "mission-control/creative-analytics/creative-brief",
-              "mission-control/creative-analytics/hook-exhaustion",
-              "mission-control/creative-analytics/concept-clusters",
-              "mission-control/creative-analytics/taxonomy",
-              "mission-control/creative-analytics/embeddings-and-similarity",
-              "mission-control/creative-analytics/operations"
+              "creative-analytics/overview",
+              "creative-analytics/analytics-page",
+              "creative-analytics/creative-brief",
+              "creative-analytics/hook-exhaustion",
+              "creative-analytics/concept-clusters",
+              "creative-analytics/taxonomy",
+              "creative-analytics/embeddings-and-similarity",
+              "creative-analytics/operations"
             ]
           },
           {
