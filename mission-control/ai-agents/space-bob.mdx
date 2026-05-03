@@ -78,7 +78,7 @@ Space Bob is the creative specialist. It analyzes ad creative performance, compa
   </Accordion>
 
   <Accordion title="Deep-dive creative analysis (v2)" icon="chart-radar">
-    Backed by the [Creative Analytics pipeline](/mission-control/creative-analytics/overview), Bob has 8 deep-dive tools that operate on the persisted analysis layer — vision tags, embeddings, exhaustion snapshots, named concept clusters, and the daily Creative Brief.
+    Backed by the [Creative Analytics pipeline](/creative-analytics/overview), Bob has 8 deep-dive tools that operate on the persisted analysis layer — vision tags, embeddings, exhaustion snapshots, named concept clusters, and the daily Creative Brief.
 
     Use these when the user asks "what should I make next?", "is my creative tired?", "find ads like this one", or "what concepts am I testing?"
 
@@ -88,18 +88,18 @@ Space Bob is the creative specialist. It analyzes ad creative performance, compa
 
 ## Creative deep-dive tools
 
-These 8 tools sit on top of the [Creative Analytics pipeline](/mission-control/creative-analytics/overview) — every ingested creative is auto-analyzed (multi-frame vision + Whisper transcript), tagged across an 8-category taxonomy, embedded into pgvector, and rolled into hook-exhaustion snapshots and named concept clusters.
+These 8 tools sit on top of the [Creative Analytics pipeline](/creative-analytics/overview) — every ingested creative is auto-analyzed (multi-frame vision + Whisper transcript), tagged across an 8-category taxonomy, embedded into pgvector, and rolled into hook-exhaustion snapshots and named concept clusters.
 
 | Tool | Description |
 |------|-------------|
 | `find_similar_creatives(creative_id, kind?)` | Cosine kNN over `CreativeEmbedding`. `kind='analysis_text'` (default) for concept similarity, `kind='image'` for visual twins / near-duplicates. |
 | `search_creatives_semantic(query, kind?)` | Free-text search. Same `kind` toggle as above. |
-| `analyze_hook_exhaustion(client_id?)` | Latest `HookExhaustionSnapshot` per archetype — spend share, ROAS slope, net-new ratio, exhaustion score, recommended alternatives. See [Hook Exhaustion](/mission-control/creative-analytics/hook-exhaustion). |
+| `analyze_hook_exhaustion(client_id?)` | Latest `HookExhaustionSnapshot` per archetype — spend share, ROAS slope, net-new ratio, exhaustion score, recommended alternatives. See [Hook Exhaustion](/creative-analytics/hook-exhaustion). |
 | `creative_diversity_score(client_id?, since_days?)` | 0–1 score of how diverse the live creatives are (entropy over hook archetypes). Low score → library is repeating itself. |
-| `creative_concept_clusters(client_id?)` | Named clusters from the weekly k-means + GPT naming pass. Returns name, summary, member count, 30-day spend + ROAS. See [Concept Clusters](/mission-control/creative-analytics/concept-clusters). |
+| `creative_concept_clusters(client_id?)` | Named clusters from the weekly k-means + GPT naming pass. Returns name, summary, member count, 30-day spend + ROAS. See [Concept Clusters](/creative-analytics/concept-clusters). |
 | `compare_creatives(creative_id_a, creative_id_b)` | Side-by-side: shared tags, distinct tags, cosine similarity score. |
 | `top_creatives_by_archetype(archetype_slug, client_id?, limit?)` | Top creatives in an archetype by 60-day ROAS. |
-| `recommend_next_creative_brief(client_id?, force_regenerate?)` | Today's persisted [Creative Brief](/mission-control/creative-analytics/creative-brief) — recommended archetype / format / audience / messaging theme + hook concept + evidence-backed rationale + risks + inspirations. The same brief shown on the analytics page and posted to Slack. |
+| `recommend_next_creative_brief(client_id?, force_regenerate?)` | Today's persisted [Creative Brief](/creative-analytics/creative-brief) — recommended archetype / format / audience / messaging theme + hook concept + evidence-backed rationale + risks + inspirations. The same brief shown on the analytics page and posted to Slack. |
 
 ### When to call which
 
