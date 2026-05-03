@@ -1,0 +1,162 @@
+---
+title: "Hook Exhaustion"
+description: "Per-archetype creative-fatigue signal: composite of spend share, ROAS slope, and net-new ratio over a 28-day rolling window"
+icon: "battery-low"
+---
+
+Hook exhaustion is Mission Control's answer to "is my creative tired?" It's a per-`(client × hook_archetype)` composite signal materialized hourly into the `HookExhaustionSnapshot` table. When an archetype crosses the exhaustion threshold for the first time, the `creative.hook_exhausted` automation trigger fires — wire it to a Slack alert, a Note, or a custom agent handoff.
+
+## The signal
+
+For each archetype that the tenant has any creatives in over the last 28 days, four sub-signals are computed:
+
+| Sub-signal | Definition | Interpretation |
+| --- | --- | --- |
+| `spend_share` | This archetype's spend ÷ tenant's total spend, in window. | How concentrated the bet is. |
+| `roas_slope` | Linear regression of weekly average ROAS, signed. | Negative = declining. |
+| `ctr_slope` | Same regression, on weekly average CTR. | Secondary fatigue indicator. |
+| `net_new_ratio` | Fraction of in-window creatives whose nearest cosine-prior is ≥ 0.15 distance away. | High = library is iterating; low = repeating. |
+
+The composite:
+
+```
+neg_roas_slope_norm  = max(0, min(1, -1 × roas_slope or 0))
+spend_share_clamped  = min(1, spend_share / 0.5)     # 0.5 saturates
+
+composite = 0.4 × neg_roas_slope_norm
+          + 0.3 × (1 − net_new_ratio)
+          + 0.3 × spend_share_clamped
+```
+
+And the gate that decides exhausted vs. healthy:
+
+```
+is_exhausted = (composite       ≥ 0.6
+              AND spend_share  ≥ 0.20
+              AND roas_slope   < 0)
+```
+
+All three conditions must hold. An archetype with high spend share but flat ROAS isn't exhausted — it's just dominant. An archetype with declining ROAS but minor spend share isn't exhausted — it's just a small failing bet.
+
+## Refresh schedule
+
+```
+Celery beat: 'creative-refresh-hook-exhaustion'
+Task:        marketing_resources.refresh_hook_exhaustion_cache
+Schedule:    crontab(minute=30)   # every hour at :30
+Queue:       automations_low
+```
+
+Each tick:
+
+1. Find all client_ids that have at least one `CreativeAnalysis` row.
+2. For each tenant, build the per-archetype signal map for the last 28 days.
+3. `update_or_create` a `HookExhaustionSnapshot` per `(client_id, archetype_slug, window_end=today)`.
+4. Compare to the prior `is_exhausted=True` set; for any *new* exhausted archetype, fire `creative.hook_exhausted`.
+
+Re-running on the same data overwrites the snapshot — there is no append. Re-firing the automation trigger only happens on a False→True transition.
+
+## The automation trigger
+
+```
+trigger:  creative.hook_exhausted
+payload:  {
+  "client_id":                "...",
+  "archetype":                "<slug>",
+  "spend_share":              0.27,
+  "roas_slope":               -0.18,
+  "net_new_ratio":            0.31,
+  "exhaustion_score":         0.71,
+  "recommended_alternatives": ["<slug>", "<slug>", "<slug>"]
+}
+```
+
+`recommended_alternatives` is a derived helper — top 3 archetypes (excluding the exhausted one) ranked by average ROAS in the same window.
+
+Wire it through the Automations builder:
+
+<Steps>
+  <Step title="Pick the trigger">
+    In the Automations editor, choose `creative.hook_exhausted` as the trigger.
+  </Step>
+  <Step title="Add a Slack action">
+    Action: `slack.send_message`. Use the trigger payload as the body — for example:
+    ```
+    :warning: Creative fatigue detected on *{{ archetype }}* ({{ exhaustion_score | round(2) }} score).
+    Spend share: {{ (spend_share * 100) | round(0) }}% — ROAS slope {{ roas_slope | round(2) }}.
+    Suggested next: {{ recommended_alternatives | join(', ') }}.
+    ```
+  </Step>
+  <Step title="(Optional) Auto-create a Note">
+    Action: `notes.create`. Pre-fill title with the archetype name and link to `/ad-creative-analytics` so the team can acknowledge / track the response.
+  </Step>
+</Steps>
+
+The trigger only fires on the *transition*. Once an archetype is exhausted, subsequent ticks re-write the snapshot but do not re-fire — so your Slack channel doesn't get spammed every hour.
+
+## Drilldown
+
+Each snapshot carries:
+
+- `top_underperformer_ids` — the 3 lowest-ROAS creatives in this archetype.
+- `recommended_alternatives` — the 3 highest-avg-ROAS archetypes (excluding the current).
+
+The analytics page **Hook Exhaustion** card uses these to render a click-through drawer: tap an archetype bar → see the bottom-3 creatives and the top-3 alternative archetypes side by side.
+
+## Endpoint
+
+<ParamField path="GET /api/marketing_resources/creatives/hook-exhaustion/" query>
+  Latest snapshot per `(client_id, archetype_slug)`. Tenant-scoped via `shared.auth.get_accessible_client_ids`.
+
+  **Query params:**
+  - `client_id` — optional; required for non-superusers.
+
+  Returns `{ "snapshots": [<HookExhaustionSnapshot>, ...] }` ordered by `(window_end desc, refreshed_at desc)`.
+</ParamField>
+
+## Bob tool
+
+```python
+@tool
+def analyze_hook_exhaustion(
+    config, client_id: str = '', lookback_weeks: int = 4,
+) -> str:
+    """Return the latest hook-archetype exhaustion snapshots: which hooks are
+    over-spent, declining, or recycling rather than netting new expressions."""
+```
+
+Returns a JSON list of snapshot objects. Bob uses it inline when a user asks "is my creative tired?" or "should I retire any archetypes?" The tool is read-only — it reads materialized snapshots, never recomputes.
+
+## Tenant scoping
+
+The `_net_new_ratio` computation has a subtle correctness bug if you're not careful: cosine kNN on `CreativeEmbedding` would naturally walk across tenant boundaries. v2 adds explicit `client_id=str(client_id)` and `kind='analysis_text'` filters on both the prior-embeddings query and the in-window query. Cross-tenant leakage is impossible.
+
+## Tunable knobs
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `LOOKBACK_DAYS` | 28 | Rolling window for spend / slope / net-new computation. |
+| `NET_NEW_DISTANCE_THRESHOLD` | 0.15 | Cosine distance below which an in-window creative is "near-prior" (not novel). |
+| Composite weights | `0.4 / 0.3 / 0.3` | ROAS slope vs. recycling vs. spend concentration. |
+| Threshold | `composite ≥ 0.6 AND spend_share ≥ 0.20 AND roas_slope < 0` | The gate. |
+
+The composite weights are baked in to `_archetype_signals_for_client` — adjusting them is a code change, not a settings flag, because changing the gate retroactively re-classifies historical snapshots. If you need a softer / harder gate per tenant, add a config row before changing the constants.
+
+## Worked example
+
+A tenant running heavy on `before_after` for 8 weeks:
+
+| Week | Spend share | Avg ROAS | CTR | Net-new | is_exhausted? |
+| --- | --- | --- | --- | --- | --- |
+| Week 1 | 0.18 | 2.6 | 1.4% | 0.45 | False (composite 0.41) |
+| Week 4 | 0.24 | 2.1 | 1.3% | 0.32 | False (composite 0.51) |
+| Week 6 | 0.27 | 1.7 | 1.1% | 0.18 | True (composite 0.69, slope −0.18) |
+
+At Week 6, the `(False → True)` transition fires `creative.hook_exhausted` once. The user's Slack rule posts the alert. Subsequent ticks (Week 6.x) re-write the snapshot but do not re-fire. If the tenant pivots and the next week's signal recovers (`is_exhausted=False`), then later regresses, the trigger fires again on that next False→True transition.
+
+## Where the code lives
+
+- `marketing_resources/tasks/refresh_hook_exhaustion.py` — `refresh_hook_exhaustion_cache`, `_archetype_signals_for_client`, `_perf_for_window`, `_weekly_slope`, `_net_new_ratio`, `_alternatives`, `_emit_exhaustion_trigger`.
+- `marketing_resources/models/hook_exhaustion.py` — `HookExhaustionSnapshot`.
+- `marketing_resources/views/creative_health.py` — the read endpoint.
+- `automations/triggers/__init__.py` — `creative.hook_exhausted` registration.

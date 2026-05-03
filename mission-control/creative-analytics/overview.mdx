@@ -1,0 +1,227 @@
+---
+title: "Creative Analytics Overview"
+description: "Motion-style creative analysis pipeline — vision, transcripts, embeddings, exhaustion, named concept clusters, and a daily brief"
+icon: "chart-radar"
+---
+
+Creative Analytics is Mission Control's end-to-end pipeline for understanding ad creatives. Every creative ingested from Meta, TikTok, or another connected ad platform is automatically analyzed by GPT-4o vision (frame-by-frame for video), transcribed (Whisper for video), tagged across an 8-category taxonomy, embedded into a pgvector index, and then fed into a daily Creative Brief — a persisted artifact recommending the next creative bet, with rationale, risks, and inspirations.
+
+<Info>
+  The pipeline is fully idempotent end-to-end. Each stage is SHA-keyed on its input so re-runs against unchanged content cost nothing. Newly ingested creatives flow through automatically via a `post_save` signal on `AdCreativeFields`.
+</Info>
+
+## What it does
+
+<CardGroup cols={2}>
+  <Card title="Sees the creative" icon="eye">
+    Multi-frame vision (5 keyframes per video, 1 frame per still) + Whisper transcript for audio. Output: structured analysis JSON with hooks, themes, on-screen copy, CTA, color palette, frame-by-frame observations, and a `diagnostics` block with strengths / weaknesses / recommended fixes.
+  </Card>
+  <Card title="Tags the creative" icon="tags">
+    Auto-tags drawn from a closed 8-category taxonomy (hook type, format, visual style, pace, emotion, CTA style, audience signal, messaging theme). Per-category confidence floors mean precision-critical categories like hook type need ≥0.75 confidence; fuzzy categories like emotional tone are fine at 0.5. Manual tags are never overwritten.
+  </Card>
+  <Card title="Embeds the creative" icon="vector-square">
+    Two pgvector embeddings per creative: `analysis_text` (concept similarity) and `image` (visual-twin / near-duplicate detection). Powers cosine kNN, free-text semantic search, k-means clustering, and the net-new-ratio signal that drives exhaustion.
+  </Card>
+  <Card title="Detects fatigue" icon="battery-low">
+    Hook exhaustion is computed per `(client × archetype)` from spend share, ROAS slope, CTR slope, and net-new ratio. A composite score crosses a threshold to mark an archetype as exhausted, which fires the `creative.hook_exhausted` automation trigger.
+  </Card>
+  <Card title="Names the concepts" icon="diagram-venn">
+    Weekly k-means over the analysis-text embedding space produces concept clusters (e.g. "UGC founder testimonial — vertical, fast-paced"). Each cluster is named by GPT-4o-mini from the cluster's tag distribution + 3 sample analyses. Stored as `CreativeConcept` rows.
+  </Card>
+  <Card title="Writes the brief" icon="lightbulb">
+    Once a day per tenant, a single source-of-truth Creative Brief is generated from the full library state. It is persisted as `CreativeBrief`, surfaced on the Ad Creative Analytics page, posted to Slack via the daily digest, and returned by Bob's `recommend_next_creative_brief` tool.
+  </Card>
+</CardGroup>
+
+## Pipeline architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│   Ad platform ingestion (Meta / TikTok / Google)                     │
+│   ──> AdCreativeFields rows materialized in interaction_insight      │
+│       with s3_image_url and/or s3_video_url populated                │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼   post_save signal
+┌──────────────────────────────────────────────────────────────────────┐
+│   knowledge_base.creative_analysis.analyze_creative                  │
+│                                                                      │
+│   Image asset:  fetch bytes → 1 frame                                │
+│   Video asset:  ffmpeg keyframes (5)  +  Whisper transcript          │
+│                                                                      │
+│   GPT-4o vision  →  structured JSON (auto_tags, diagnostics, ...)    │
+│                                                                      │
+│   Persists CreativeAnalysis (kb_creative_analysis)                   │
+│   Promotes auto_tags above per-category floors                       │
+│   Mirrors prose synthesis into a "Creative Insights" KB              │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼   .delay()
+┌──────────────────────────────────────────────────────────────────────┐
+│   marketing_resources.tasks.embed_creative                           │
+│                                                                      │
+│   Two embeddings per creative:                                       │
+│     kind='analysis_text'  ←  prose synthesis of the analysis         │
+│     kind='image'          ←  format + frame_observations + OCR copy  │
+│                                                                      │
+│   text-embedding-3-small (1536-dim, HNSW pgvector index)             │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ refresh_hook_    │  │ refresh_creative_│  │ generate_daily_  │
+│ exhaustion_cache │  │ concepts         │  │ brief (fan-out)  │
+│ (hourly)         │  │ (weekly Mon)     │  │ (hourly poller)  │
+│                  │  │                  │  │                  │
+│ Composite signal │  │ k-means + GPT-4o-│  │ Per-tenant LLM   │
+│ per archetype.   │  │ mini naming pass.│  │ call grounded in │
+│ Emits trigger on │  │ Names concepts   │  │ exhaustion +     │
+│ False→True.      │  │ from tag distrib │  │ diversity + top  │
+│                  │  │ + sample summary.│  │ performers + ... │
+│                  │  │                  │  │                  │
+│ HookExhaustion-  │  │ CreativeConcept  │  │ CreativeBrief    │
+│ Snapshot rows.   │  │ rows.            │  │ rows.            │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│   Surfaces                                                           │
+│                                                                      │
+│   Frontend  ▶  /ad-creative-analytics page (KPIs, brief, exhaustion  │
+│                  chart, concept bubbles, semantic search, explain)   │
+│   Slack     ▶  Daily Mission Briefing — Creative Brief block         │
+│   Bob       ▶  8 deep-dive tools (recommend_next_creative_brief is   │
+│                  a thin fetch wrapper over CreativeBrief)            │
+│   API       ▶  /api/marketing_resources/creatives/{daily-brief,      │
+│                  hook-exhaustion, concept-clusters, search,          │
+│                  similar, explain, cost}                             │
+│   Automations ▶ creative.hook_exhausted trigger fires user-defined   │
+│                  Slack alerts + Note creation when an archetype      │
+│                  transitions from healthy to exhausted               │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+## Data model
+
+| Model | Stores | Key fields |
+| --- | --- | --- |
+| `interaction_insight.AdCreativeFields` | Ingested creatives from ad platforms | `client_id`, `ad_id`, `s3_image_url`, `s3_video_url`, `ad_name` |
+| `knowledge_base.CreativeAnalysis` | Vision-pass output (one row per creative) | `analysis` (JSON), `transcript`, `frames_analyzed`, `cost_cents`, `asset_kind` |
+| `marketing_resources.CreativeTagCategory` | 8 system categories | `slug`, `name`, `confidence_floor` |
+| `marketing_resources.CreativeTag` | System tags + per-client custom tags | `slug`, `category`, `is_system` |
+| `marketing_resources.CreativeTagAssignment` | Tag assignments to creatives | `tag`, `creative_id`, `source` (`manual`/`auto`), `confidence` |
+| `marketing_resources.CreativeEmbedding` | pgvector embeddings (2 kinds per creative) | `embedding` (1536-dim), `kind`, `cost_cents` |
+| `marketing_resources.HookExhaustionSnapshot` | Per-(client × archetype) exhaustion signal | `exhaustion_score`, `is_exhausted`, `recommended_alternatives` |
+| `marketing_resources.CreativeConcept` | Named concept clusters | `name`, `summary`, `centroid`, `member_creative_ids`, `spend_30d`, `roas_30d` |
+| `marketing_resources.CreativeBrief` | Daily Creative Brief (one per `(client, date)`) | `headline`, `hook_concept`, `recommended_*`, `rationale`, `risks`, `inspirations` |
+
+## Key design decisions
+
+<AccordionGroup>
+  <Accordion title="Brief is a persisted artifact, not a re-aggregated tool output" icon="floppy-disk">
+    The first version of `recommend_next_creative_brief` re-aggregated everything every call (and returned hardcoded `format='ugc'`, `audience='gen_z'` defaults). v2 promotes the brief to a `CreativeBrief` row generated once per day per tenant by a Celery task. The page, Slack, and Bob all read the same row — single source of truth, cacheable, auditable, comparable day-over-day.
+  </Accordion>
+
+  <Accordion title="Multi-frame video, not just a thumbnail" icon="film">
+    For video creatives `s3_image_url` is just a thumbnail — one frame. Short-form social ads ARE the first 3 seconds; one frame loses the hook. The pipeline runs ffmpeg to extract 5 keyframes (frame 0 + 4 evenly spaced) and passes all of them to GPT-4o vision in a single multimodal call.
+  </Accordion>
+
+  <Accordion title="Whisper transcript for video" icon="microphone">
+    Voiceover and on-screen captions are half the storytelling. Video assets are transcribed via `whisper-1`; both the raw transcript and the model's distilled `spoken_hook` land on the row and fold into the embedding doc.
+  </Accordion>
+
+  <Accordion title="Two embedding kinds, not one" icon="vector-square">
+    `kind='analysis_text'` embeds a prose synthesis of the analysis JSON — used for concept similarity and free-text search. `kind='image'` embeds a visually-flavored doc (format notes, frame observations, palette, OCR copy) — used for visual-twin / near-duplicate detection. The two are queryable independently from the API and Bob tools.
+  </Accordion>
+
+  <Accordion title="Per-category confidence floors" icon="sliders">
+    Different categories deserve different confidence thresholds. `hook_type` benefits from precision (≥0.75) so wrong tags don't poison the exhaustion signal; `emotion` is inherently fuzzy and is fine at 0.5. Floors are stored on `CreativeTagCategory.confidence_floor` and applied at auto-tag promotion time.
+  </Accordion>
+
+  <Accordion title="Manual tags are never overwritten" icon="user-pen">
+    `CreativeTagAssignment.source` distinguishes `manual` from `auto`. The auto-tagger's `_upsert_assignment` function only refreshes rows where `source='auto'`. A user's deliberate tag is permanent unless they delete it themselves.
+  </Accordion>
+
+  <Accordion title="Prose embedding doc, not labeled JSON" icon="file-lines">
+    The first version of the embedding doc looked like `**Hooks:** ...\n**Themes:** ...`. Those literal labels dominated the embedding vector and made semantic search return matches on the word `Hooks`. v2 emits a clean prose synthesis (3–6 sentences in plain English, transcript appended for video).
+  </Accordion>
+</AccordionGroup>
+
+## Surfaces
+
+The same artifacts power four surfaces:
+
+<Steps>
+  <Step title="Ad Creative Analytics page (frontend)">
+    `/ad-creative-analytics` — KPI tiles, full Daily Brief panel, hook-exhaustion chart, concept-clusters bubble chart, top performers, semantic search with concept↔visual-twin toggle, and a per-creative explain drawer with diagnostics, transcript, tags, benchmarks, and similar creatives.
+
+    See [Analytics page](/mission-control/creative-analytics/analytics-page).
+  </Step>
+  <Step title="Daily Slack digest">
+    The existing daily Mission Briefing Slack message now includes a Creative Brief block: headline, recommended bet badges, hook concept, three rationale bullets, and a button linking to the analytics page. Honors the existing `daily_digest_enabled` / `daily_digest_time` per-workspace settings.
+  </Step>
+  <Step title="Bob deep-dive tools">
+    8 LangGraph tools for ad-hoc creative analysis in the chat: similarity (concept + visual), free-text semantic search, hook exhaustion, diversity score, concept clusters, side-by-side compare, top performers per archetype, and `recommend_next_creative_brief` (which fetches today's persisted brief or generates one synchronously).
+
+    See [Space Bob](/mission-control/ai-agents/space-bob).
+  </Step>
+  <Step title="Automation triggers">
+    `creative.hook_exhausted` fires on the False→True transition when an archetype's composite score crosses 0.6 with spend share ≥ 0.2 and a negative ROAS slope. Wire it to an automation rule to send Slack alerts, create Notes, or hand off to another agent.
+  </Step>
+</Steps>
+
+## Cost profile
+
+Costs are tracked on every row (`tokens_in`, `tokens_out`, `cost_cents`) so a per-tenant 30-day spend rollup is just `creative_cost_for_client(client_id)`. Defaults at May 2026 OpenAI rates:
+
+| Operation | Per-call cost |
+| --- | --- |
+| Vision (single image) | ~$0.005 |
+| Vision (5-frame video) + Whisper transcript | ~$0.025 |
+| Embedding (both kinds combined) | ~$0.0002 |
+| Daily brief generation | ~$0.02–$0.05 per tenant per day |
+| Concept naming (per cluster, weekly) | ~$0.003 |
+
+The analytics page surfaces 30-day spend in a KPI tile. The `creative_pipeline_status` management command prints it for every tenant. Backfill cost previews are available via `run_creative_pipeline --dry-run`.
+
+## Where the code lives
+
+| Layer | Path |
+| --- | --- |
+| Ingestion signal | `interaction_insight/signals_creative.py` |
+| Vision + auto-tagging | `knowledge_base/creative_analysis.py` |
+| Asset pipeline (frames + transcript) | `knowledge_base/asset_pipeline.py` |
+| Embeddings | `marketing_resources/tasks/embed_creative.py` |
+| Hook exhaustion | `marketing_resources/tasks/refresh_hook_exhaustion.py` |
+| Concept clusters | `marketing_resources/tasks/refresh_creative_concepts.py` |
+| Daily brief generator | `marketing_resources/services/brief_generator.py` |
+| Daily brief Celery surface | `marketing_resources/tasks/generate_daily_brief.py` |
+| API endpoints | `marketing_resources/views/creative_*.py` |
+| Bob deep-dive tools | `ai_chat/tools_creative.py` |
+| Frontend page | `l5ui/src/app/components/ad-creative-analytics/` |
+| Beat schedule | `layerfive/celery.py` |
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Daily Creative Brief" href="/mission-control/creative-analytics/creative-brief" icon="lightbulb">
+    The brief generator deep dive — what's in the LLM context, the persistence model, and how the same brief flows to UI / Slack / Bob.
+  </Card>
+  <Card title="Hook Exhaustion" href="/mission-control/creative-analytics/hook-exhaustion" icon="battery-low">
+    The composite signal math, the False→True transition trigger, and how to wire automations off it.
+  </Card>
+  <Card title="Concept Clusters" href="/mission-control/creative-analytics/concept-clusters" icon="diagram-venn">
+    k-means over embeddings, GPT-4o-mini naming, and the bubble chart UI.
+  </Card>
+  <Card title="Taxonomy & Tagging" href="/mission-control/creative-analytics/taxonomy" icon="tags">
+    The 8 categories, ~70 system tags, per-category confidence floors, and how to extend the taxonomy.
+  </Card>
+  <Card title="Embeddings & Similarity" href="/mission-control/creative-analytics/embeddings-and-similarity" icon="vector-square">
+    pgvector setup, the two embedding kinds, and how kNN / semantic-search endpoints work.
+  </Card>
+  <Card title="Operations & Backfill" href="/mission-control/creative-analytics/operations" icon="terminal">
+    The four management commands (seed / run / status / embed-backfill), Celery beat, deployment, and cost monitoring.
+  </Card>
+</CardGroup>

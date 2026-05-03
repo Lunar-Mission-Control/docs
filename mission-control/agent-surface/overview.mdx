@@ -1,0 +1,184 @@
+---
+title: "Agent Surface Overview"
+description: "The unified surface across automations, custom agents, skills, knowledge bases, and the operations dashboard"
+icon: "diagram-project"
+---
+
+The Agent Surface is the umbrella term for everything Mission Control exposes around AI-driven workflows: the **Automations engine** (triggers + actions), the **Agent Builder** (custom LangGraph agents), the **Skills** library (composable prompt+tool blocks), the **Knowledge Bases** (RAG storage with cosine kNN retrieval), and the **Live Operations dashboard** + **Run History** that surface what's running and what just ran.
+
+These are gated as a single surface — superusers and elevated agency roles can access all of them; client-tenant users see none of them. See [Permissions](/mission-control/agent-surface/permissions) for the full access matrix.
+
+## What's in the surface
+
+<CardGroup cols={3}>
+  <Card title="Automations" href="/mission-control/agent-surface/automations" icon="gears">
+    Trigger → conditions → action chains. 15 triggers (note lifecycle, schedule, agent runs, creative.hook_exhausted, …) and 15 actions (Slack, Notes, KB writes, run an agent, webhooks).
+  </Card>
+  <Card title="Agent Builder" href="/mission-control/agent-surface/agent-builder" icon="user-robot">
+    Define custom LangGraph agents with their own system prompts, tool sets, and avatars. Agents live alongside Houston / Space Bob / Social Sally in the multi-agent swarm.
+  </Card>
+  <Card title="Skills" href="/mission-control/agent-surface/skills" icon="wand-sparkles">
+    Reusable, composable prompt + tool bundles. Agents pull skills in as building blocks (e.g., "summarize a campaign", "explain a creative").
+  </Card>
+  <Card title="Knowledge Bases" href="/mission-control/agent-surface/knowledge-bases" icon="book-open">
+    Per-account RAG stores. Documents are chunked, embedded into pgvector, and retrieved via cosine kNN. Includes a Google Drive ingestion path.
+  </Card>
+  <Card title="Live Operations" icon="monitor-heart">
+    Real-time dashboard of running automation runs, agent runs, and worker health. WebSocket-pushed via the `automations` consumer.
+  </Card>
+  <Card title="Run History" icon="clock-rotate-left">
+    Paginated, filterable history of every automation run (success / failure / replay). Each row links to the input payload, the action chain, and the resulting log lines.
+  </Card>
+</CardGroup>
+
+## How the pieces fit
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  TRIGGER  (note.created, schedule.tick, creative.hook_exhausted, │
+│           webhook.incoming, agent.run_failed, ...)              │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  AUTOMATION RULE                                                 │
+│   - filters / payload_match conditions                           │
+│   - one or more ordered actions                                  │
+│   - rate limit / dedup config                                    │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  ACTION  (send_slack, change_status, run_agent, add_to_kb, ...)  │
+│                                                                  │
+│  run_agent and run_agent_chain are the bridges into the agent    │
+│  swarm — they invoke a registered agent with the trigger payload │
+│  as initial context, optionally through a Skill.                 │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                ┌──────────────┼──────────────┐
+                ▼              ▼              ▼
+┌──────────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Built-in agents  │  │ Custom agent │  │ Skill        │
+│ Houston, Space   │  │ (CustomAgent │  │ (Skill model │
+│ Bob, Social Sally│  │  model)      │  │  with prompt │
+│                  │  │              │  │  + tool list)│
+└──────────────────┘  └──────────────┘  └──────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Tool calls                                                      │
+│   - get_creative_performance, find_similar_creatives,            │
+│     analyze_hook_exhaustion, search_knowledge_base, ...          │
+│   - knowledge_base/* tools retrieve from the KBs above           │
+│   - tools_creative/* tools read the creative-analysis pipeline   │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Run history + live ops                                          │
+│   - automations.live consumes WebSocket events                   │
+│   - automations.tasks logs every run / step / agent invocation   │
+│   - failures fan out via agent.run_failed → user automations     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Triggers
+
+15 triggers ship in `automations/triggers/__init__.py`. Each registers a payload schema that downstream actions can reference.
+
+| Key | Fires when |
+| --- | --- |
+| `note.created` | A `notes.Notes` row is inserted. |
+| `note.status_changed` | A note's status field changes. |
+| `note.status_unchanged` | A note has been in the same status for N days (sweep). |
+| `note.assignment_changed` | An assignee is added or removed. |
+| `note.due_date_set` | A note gains a `due_date` value. |
+| `note.due_date_arrived` | A note's `due_date` is today (sweep). |
+| `note.custom_field_set` | A custom field on a note is set. |
+| `kb.document_added` | A `Document` enters `STATUS_READY` in any knowledge base. |
+| `creative.hook_exhausted` | A `(client × archetype)` transitions from healthy to exhausted. See [Hook Exhaustion](/mission-control/creative-analytics/hook-exhaustion). |
+| `agent.run_succeeded` | A LangGraph swarm run finishes successfully. |
+| `agent.run_failed` | A LangGraph swarm run errors out. |
+| `schedule.tick` | A user-defined recurring schedule fires (cron). |
+| `schedule.weekly` | Weekly cron with day-of-week selector. |
+| `schedule.monthly` | Monthly cron with day-of-month selector. |
+| `webhook.incoming` | An inbound HTTP request hits the automation's webhook URL. |
+
+Each trigger key has a `config_schema` (the form fields the UI shows) and a payload shape (the keys the trigger emits when it fires). The dispatcher passes the payload to actions verbatim — actions reference `{{ payload.something }}` in their templates.
+
+## Actions
+
+15 actions ship in `automations/actions/`. Each is decorated with `@register_action(...)`.
+
+| Key | What it does |
+| --- | --- |
+| `send_slack` | Post to a Slack channel via the connected workspace. |
+| `send_email` | Send a transactional email via the configured SMTP. |
+| `change_status` | Set a note's status. Idempotent. |
+| `assign_users` | Add / remove assignees on a note. |
+| `set_due_date` | Set or clear `notes.Notes.due_date`. |
+| `set_custom_field` | Set a custom field value on a note. |
+| `update_note` | Bulk-update fields on a note. |
+| `inline_comment_mention` | Post a comment on a note (with `@mentions`). |
+| `apply_template` | Apply a note template (clones fields + creates subtasks). |
+| `create_subtasks` | Create one or more subtasks under a parent note. |
+| `create_or_move_task` | Create a new note or move an existing one between folders. |
+| `add_to_kb` | Write a Document into a knowledge base. |
+| `webhook_call` | Outbound HTTP call to a configured URL. |
+| `run_agent` | Invoke a LangGraph swarm with the trigger payload as initial context. |
+| `run_agent_chain` | Invoke another automation rule (chained workflows). |
+
+`run_agent` is the action that bridges the automation engine into the agent swarm. Pair it with the `agent.run_succeeded` / `agent.run_failed` triggers to build retry / fallback / Slack-on-failure chains.
+
+## Engine
+
+`automations/engine.py` is the single entry point:
+
+```python
+from automations.engine import dispatch
+dispatch('creative.hook_exhausted', {
+    'client_id': '123',
+    'archetype': 'before_after',
+    ...
+})
+```
+
+`dispatch(trigger_key, payload)` finds matching automation rules for the tenant, evaluates each rule's filters / payload_match conditions, and enqueues the action chain on the `automations_standard` Celery queue. Every step writes a row in `automations.AutomationRun` for the Run History view.
+
+## Live Operations + Run History
+
+- **Live Operations** is at `/automations/operations`. WebSocket consumer (`automations/consumers.py`) pushes events: run started, action completed, run failed. The dashboard shows in-flight automation runs alongside in-flight agent runs.
+- **Run History** is at `/automations/history`. Server-side paginated, filterable by trigger, action, status, date range, client. Each row deep-links to the run detail (input payload + action chain + per-step logs).
+
+The `agent.run_failed` trigger fires automatically on any errored swarm run, so you can wire a Slack alert to surface failures back to the team.
+
+## API + WebSocket reference
+
+| Concern | Path |
+| --- | --- |
+| Automation CRUD | `/api/automations/automations/` |
+| Run history | `/api/automations/runs/` |
+| Run replay | `/api/automations/runs/<id>/replay/` |
+| Cancel run | `/api/automations/runs/<id>/cancel/` |
+| Operations history | `/api/automations/operations/history/` |
+| Agent surface system check | `/api/automations/system-checks/` (returns `agent_surface.W001 / W002`) |
+| Live operations websocket | `/ws/automations/live/` |
+| Trigger / action registry | `/api/automations/registry/` |
+
+All endpoints are gated by `shared.permissions.AgentSurfaceAllowed` (mirrors `shared.auth.agent_surface_allowed`).
+
+## Where the code lives
+
+| Area | Path |
+| --- | --- |
+| Engine | `automations/engine.py`, `automations/registry.py` |
+| Triggers | `automations/triggers/__init__.py` (registry), `automations/signals.py` (emitters), `automations/sweeps.py` (cron-driven triggers) |
+| Actions | `automations/actions/*.py` (one file per action) |
+| Live ops WebSocket | `automations/consumers.py`, `automations/live.py` |
+| Run history | `automations/api/views.py`, `automations/models.py:AutomationRun` |
+| Agent swarm wiring | `ai_chat/agents.py`, `ai_chat/graph.py` |
+| Custom agents | `custom_agents/` |
+| Skills | `skills/` |
+| Knowledge Bases | `knowledge_base/` |
+| Permission gate | `shared/auth.py:agent_surface_allowed`, `shared/permissions.py:AgentSurfaceAllowed`, `l5ui/.../agent-surface.guard.ts` |

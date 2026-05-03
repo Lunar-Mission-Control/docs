@@ -1,0 +1,179 @@
+---
+title: "Agent Builder"
+description: "Define custom LangGraph agents with their own system prompts, tool sets, and avatars — sit alongside Houston, Space Bob, and Social Sally"
+icon: "user-robot"
+---
+
+The Agent Builder lets operators create custom LangGraph agents without writing Python. Each agent has a name, avatar, system prompt, and a curated tool list. Once saved, the agent is selectable in the chat alongside Houston, Space Bob, and Social Sally and can be invoked from automations via the `run_agent` action.
+
+<Info>
+  Custom agents live in the `custom_agents` Django app and share the same swarm graph as built-in agents. Handoff tools work transparently — a custom agent can transfer to Houston for analytics, Space Bob for creatives, etc.
+</Info>
+
+## Agent shape
+
+A custom agent is a `CustomAgent` row with:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `agent_id` | UUID | Stable id for handoff routing. |
+| `client_id` | string | Tenant scope. Per-tenant agents are isolated. |
+| `name` | string | Display name in the chat selector. |
+| `description` | string | Shown in the agent picker. |
+| `icon` | string \| null | Material icon name (or path to uploaded avatar). |
+| `avatar_url` | string \| null | Upload via `POST /api/custom_agents/<id>/avatar/`. |
+| `color` | string | Hex color for the agent's chat bubble. |
+| `system_prompt` | text | Behavior rules + persona. |
+| `tools` | JSON list | Tool keys (e.g. `['get_creative_performance', 'find_similar_creatives']`). |
+| `suggested_prompts` | JSON list | Quick-start prompts shown when the agent is opened fresh. |
+| `is_active` | bool | Soft-disable. |
+| `created_by`, `created_at` | meta | Audit. |
+
+## Tool catalog
+
+The full set of available tools is registered in `ai_chat/tools.py`. Custom agents reference tools by key. Categories:
+
+| Category | Examples |
+| --- | --- |
+| Core | `get_channels`, `get_campaigns`, `list_notes`, `create_note` |
+| Channel performance | `get_channel_performance`, `compare_channels` |
+| Reports | `list_reports`, `load_report`, `save_report` |
+| Dashboards | `list_dashboards`, `load_dashboard` |
+| Notes | `create_note`, `update_note`, `assign_note`, `comment_on_note` |
+| Outliers | `get_outliers`, `explain_outlier` |
+| Creative | `get_creative_performance`, `analyze_creative_ab_test`, `get_creative_insights`, `gather_creative_params` |
+| Creative deep-dive (v2) | `find_similar_creatives`, `search_creatives_semantic`, `analyze_hook_exhaustion`, `creative_diversity_score`, `creative_concept_clusters`, `compare_creatives`, `top_creatives_by_archetype`, `recommend_next_creative_brief` |
+| Copywriting | `write_ad_copy` |
+| Custom metrics | `list_custom_metrics`, `compute_custom_metric` |
+| Visualizations | `create_visualization` |
+| Social Sally / paid media | `check_meta_ad_thresholds`, `scan_account_change_activity`, `check_landing_page_funnel_alignment`, `diagnose_performance_drop`, `gather_scan_params` |
+| Knowledge base | `search_knowledge_base`, `list_knowledge_bases` |
+
+The agent builder UI shows checkboxes grouped by category — pick the tools the agent needs, save, and the agent's tool list is materialized.
+
+## System prompt
+
+The system prompt defines the agent's persona, rules, and conversation flow. Style follows the built-in agents (see [Houston](/mission-control/ai-agents/houston), [Space Bob](/mission-control/ai-agents/space-bob), [Social Sally](/mission-control/ai-agents/social-sally) for examples).
+
+Recommendations:
+
+1. **Lead with role.** "You are <name>, specialized in <domain>."
+2. **List capabilities explicitly.** "Your core capabilities: 1. … 2. …"
+3. **Define handoff conditions.** "If asked about <out-of-scope topic>, use the `transfer_to_<agent>` tool."
+4. **State output format expectations.** "Respond in dashboard-style markdown tables when showing multi-account results."
+5. **Set guardrails.** "Only report on data that exists. If unavailable, mark as 'Data Unavailable'."
+
+The agent's system prompt is rendered into the LangGraph swarm at conversation start and stays fixed for the run. Tools passed to the agent get their docstrings appended automatically — the model uses those to know which tool to call.
+
+## Avatar upload
+
+`POST /api/custom_agents/<agent_id>/avatar/` (multipart) — accepts PNG/JPEG up to 2 MB. Stored in S3 under `media/avatars/`. Avatars are returned as absolute URLs in agent listing responses (so the chat UI doesn't need to know the storage backend).
+
+## Invocation paths
+
+A custom agent runs in three contexts:
+
+<Steps>
+  <Step title="Interactive chat">
+    The user opens the agent selector and picks the custom agent. From that point the conversation routes to it (with handoff tools available to transfer back to a built-in agent).
+  </Step>
+  <Step title="From an automation">
+    The `run_agent` action takes an `agent_id` config. When the action fires, it spawns a one-shot agent run with the trigger payload as the initial user message. Optionally posts the agent's final message back to a Slack channel.
+  </Step>
+  <Step title="Group chat">
+    A user can `@mention` the custom agent in a group chat alongside built-in agents. The swarm router decides who responds based on the mention + system prompts.
+  </Step>
+</Steps>
+
+## Scope gating
+
+Custom agent visibility is per-tenant via `agent_scope.py`. A user only sees the agents associated with their accessible client_ids. Superusers see everything.
+
+The `share_visible_agent_helper` function in `ai_chat` exposes the agent list to the frontend's chat selector — it's the single source of truth across in-app chat, the share-link viewer (read-only), and the API.
+
+## Endpoints
+
+<ParamField path="GET /api/custom_agents/" query>
+  List custom agents the caller can see. Tenant-scoped.
+</ParamField>
+
+<ParamField path="POST /api/custom_agents/" body>
+  Create a new custom agent. Body: `{ name, description, icon, color, system_prompt, tools, suggested_prompts }`.
+</ParamField>
+
+<ParamField path="GET /api/custom_agents/<id>/" query>
+  Fetch a single custom agent. Returns the full agent shape including avatar URL.
+</ParamField>
+
+<ParamField path="PATCH /api/custom_agents/<id>/" body>
+  Update fields on an existing agent.
+</ParamField>
+
+<ParamField path="POST /api/custom_agents/<id>/avatar/" body>
+  Upload an avatar (multipart `file` field).
+</ParamField>
+
+<ParamField path="POST /api/custom_agents/<id>/duplicate/" body>
+  Clone an existing agent. Useful for A/B testing prompt variants.
+</ParamField>
+
+<ParamField path="POST /api/custom_agents/<id>/run-replay/" body>
+  Replay a prior run with the same agent + initial context but the agent's *current* config. Surfaces prompt-tuning gains retroactively.
+</ParamField>
+
+All gated by `shared.permissions.AgentSurfaceAllowed`.
+
+## Worked example
+
+A "Performance Reporter" custom agent for an agency:
+
+```
+name:        Performance Reporter
+description: Weekly performance roll-ups across all client accounts.
+icon:        bar-chart-3
+color:       #14b8a6
+
+system_prompt:
+  You are Performance Reporter, an analytics agent that produces weekly
+  summary tables across all of an agency's clients.
+
+  Your capabilities:
+  1. Pull last-7-day spend, revenue, ROAS, CTR, and CPA per client.
+  2. Group by media source (Meta, Google, TikTok, ...).
+  3. Flag week-over-week deltas > 25% in either direction.
+  4. Output as a markdown table sorted by spend desc.
+
+  Rules:
+  - Always include the client name and period.
+  - Use the channel-performance tools, never raw SQL.
+  - For unavailable data, mark "—" — do not omit the row.
+
+  If asked about creative analysis, hand off to Space Bob via
+  transfer_to_space_bob.
+
+tools: [
+  get_channels,
+  get_channel_performance,
+  compare_channels,
+  list_clients,
+  create_visualization,
+]
+
+suggested_prompts: [
+  { label: "Weekly summary", message: "Generate this week's performance summary for all clients" },
+  { label: "Top movers", message: "Which clients had the biggest week-over-week change?" },
+]
+```
+
+Wire the agent to a `schedule.weekly` automation (Monday 09:00 UTC) with a `run_agent` action that posts the result to `#client-summaries` Slack — the agent sends its weekly report automatically.
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| Model + admin | `custom_agents/models.py`, `custom_agents/admin.py` |
+| API views | `custom_agents/views.py` |
+| URL routes | `custom_agents/urls.py` |
+| Avatar upload + storage | `custom_agents/views.py:CustomAgentAvatarUploadView` |
+| Swarm wiring | `ai_chat/agents.py`, `ai_chat/graph.py` |
+| Scope gating | `ai_chat/agent_scope.py` |

@@ -1,0 +1,188 @@
+---
+title: "Automations"
+description: "Trigger → conditions → actions. Workflow rules that react to events across notes, schedules, agents, knowledge bases, creatives, and incoming webhooks"
+icon: "gears"
+---
+
+The Automations engine turns events into actions. Each rule has a trigger (one of 15 event types), zero or more filters / payload-match conditions, and one or more ordered actions. Rules are tenant-scoped, run on Celery, and every run is logged for replay + audit.
+
+<Info>
+  Use `dispatch(trigger_key, payload)` from any backend code to fire a trigger. The engine matches it against user-defined rules and enqueues the action chain — your code doesn't need to know which rules exist.
+</Info>
+
+## Building a rule
+
+In the UI, an automation rule has four sections:
+
+1. **Trigger** — pick from 15 trigger types. The form re-renders to show the trigger's config schema (e.g., `note.status_changed` shows "from status" / "to status" pickers; `schedule.weekly` shows day-of-week selectors).
+2. **Filters** — additional payload-match conditions. The trigger may already filter (e.g., `note.created` can pre-filter by category); filters here are arbitrary expressions on the payload.
+3. **Actions** — one or more, ordered. Each action has its own config schema. Actions can reference any field on the trigger payload via Jinja-style templates: `{{ payload.note_id }}`.
+4. **Settings** — rate limit (e.g., max once per hour per `client_id`), dedup key, enabled/disabled, owner.
+
+Saving the rule writes an `Automation` row plus (for schedule triggers) a corresponding `django_celery_beat.PeriodicTask` so the schedule registers with the beat.
+
+## Trigger reference
+
+<AccordionGroup>
+  <Accordion title="Note triggers" icon="note">
+    | Key | Fires when |
+    | --- | --- |
+    | `note.created` | A `notes.Notes` row is inserted. Payload: full note dict + `category`, `subcategory`, `media_source` for filtering. |
+    | `note.status_changed` | `Notes.status` changes. Payload includes both `from_status` and `to_status`. |
+    | `note.status_unchanged` | A note has been in the same status for N days. Daily sweep at 13:00 UTC (`automations.sweep_status_unchanged`). |
+    | `note.assignment_changed` | Assignees added or removed. Payload includes `added_users` / `removed_users`. |
+    | `note.due_date_set` | A note gains a `due_date` value. |
+    | `note.due_date_arrived` | A note's `due_date` is today. Hourly sweep at minute 5 (`automations.sweep_due_date_arrivals`). |
+    | `note.custom_field_set` | A custom field on a note is set or changed. Payload includes `field_name`, `value`. |
+  </Accordion>
+
+  <Accordion title="Knowledge base triggers" icon="book-open">
+    | Key | Fires when |
+    | --- | --- |
+    | `kb.document_added` | A `Document` enters `STATUS_READY` (after chunking + embedding). Useful for notifying the team a new doc is searchable. |
+  </Accordion>
+
+  <Accordion title="Creative triggers" icon="palette">
+    | Key | Fires when |
+    | --- | --- |
+    | `creative.hook_exhausted` | A `(client × archetype)` transitions from healthy to exhausted. Payload: `archetype`, `spend_share`, `roas_slope`, `net_new_ratio`, `exhaustion_score`, `recommended_alternatives`. See [Hook Exhaustion](/mission-control/creative-analytics/hook-exhaustion). |
+  </Accordion>
+
+  <Accordion title="Agent run triggers" icon="user-robot">
+    | Key | Fires when |
+    | --- | --- |
+    | `agent.run_succeeded` | A LangGraph swarm run completes without error. Payload: `agent_id`, `run_id`, `final_message`. |
+    | `agent.run_failed` | A swarm run errors. Payload includes the exception class + first 2KB of the trace. Use this for Slack alerts on production failures. |
+  </Accordion>
+
+  <Accordion title="Schedule triggers" icon="clock">
+    | Key | Pattern |
+    | --- | --- |
+    | `schedule.tick` | Free-form cron (`crontab(...)` expression). |
+    | `schedule.weekly` | Day-of-week + hour:minute. |
+    | `schedule.monthly` | Day-of-month + hour:minute. Handles short-month edge cases. |
+
+    Each registers a `PeriodicTask` row in django-celery-beat. Cancelling the rule deletes the periodic task too.
+  </Accordion>
+
+  <Accordion title="Webhook triggers" icon="webhook">
+    | Key | Pattern |
+    | --- | --- |
+    | `webhook.incoming` | The rule is given a unique inbound URL. POST any JSON body — it becomes the trigger payload. Useful for integrations not directly supported (Zapier, n8n, etc). Auth via a per-rule shared secret in the URL. |
+  </Accordion>
+</AccordionGroup>
+
+## Action reference
+
+<AccordionGroup>
+  <Accordion title="Communication" icon="comment">
+    | Key | Purpose |
+    | --- | --- |
+    | `send_slack` | Post a Block Kit or text message to a Slack channel via the connected workspace. Honors per-tenant rate limits. |
+    | `send_email` | Send a transactional email via the configured SMTP. Subject + body support `{{ payload.* }}` templates. |
+    | `inline_comment_mention` | Post a comment on a note. Supports `@user` mentions that fan out as in-app notifications. |
+  </Accordion>
+
+  <Accordion title="Note management" icon="note-pencil">
+    | Key | Purpose |
+    | --- | --- |
+    | `change_status` | Set a note's status. Idempotent (no-op if already in target state). |
+    | `assign_users` | Add or remove assignees. |
+    | `set_due_date` | Set or clear `due_date`. |
+    | `set_custom_field` | Set a custom field on the note. |
+    | `update_note` | Bulk update note fields (title, body, priority, ...). |
+    | `apply_template` | Apply a saved note template — clones fields and creates the template's subtasks under the trigger note. |
+    | `create_subtasks` | Create one or more subtasks under a parent note. |
+    | `create_or_move_task` | Create a new note or move an existing one between folders. |
+  </Accordion>
+
+  <Accordion title="Knowledge base" icon="book-open">
+    | Key | Purpose |
+    | --- | --- |
+    | `add_to_kb` | Write a Document into a knowledge base. Body, title, mime type, and target KB are configurable. Triggers ingest_document automatically. |
+  </Accordion>
+
+  <Accordion title="External" icon="webhook">
+    | Key | Purpose |
+    | --- | --- |
+    | `webhook_call` | Outbound HTTPS call to a configured URL with the trigger payload (or a custom body). Supports retries with exponential backoff. |
+  </Accordion>
+
+  <Accordion title="Agent invocation" icon="user-robot">
+    | Key | Purpose |
+    | --- | --- |
+    | `run_agent` | Invoke a LangGraph swarm with the trigger payload as initial context. Configure: which agent (Houston / Space Bob / Social Sally / a custom agent), system prompt overrides, optional Slack post-back of the agent's final message. |
+    | `run_agent_chain` | Invoke another automation rule by id. Enables multi-stage workflows. |
+  </Accordion>
+</AccordionGroup>
+
+## Run history
+
+Every dispatch produces an `AutomationRun` row:
+
+| Field | Meaning |
+| --- | --- |
+| `run_id` | UUID. |
+| `automation` | FK to the rule. |
+| `trigger_key` | The trigger that fired. |
+| `payload` | Full trigger payload (for replay). |
+| `status` | `queued` / `running` / `succeeded` / `failed` / `cancelled`. |
+| `started_at`, `finished_at` | Wall clock. |
+| `step_logs` | List of per-action log lines (success, error, output snippet). |
+| `chained_from` | Set when this run was kicked off by `run_agent_chain` from another rule. |
+
+The Run History view (`/automations/history`) is server-side paginated, filterable by trigger / action / status / date range / client. Click a row → see the original payload and per-step logs.
+
+## Replay
+
+`POST /api/automations/runs/<run_id>/replay/` re-dispatches the original payload through the rule's *current* configuration. Useful when a rule's action set changes and you want to retroactively apply the new chain.
+
+The replayed run is tagged with `replayed_from=<original_run_id>` for audit.
+
+## Cancel
+
+`POST /api/automations/runs/<run_id>/cancel/` revokes any queued actions in the chain. In-flight actions complete; downstream actions are skipped. The run finishes with `status='cancelled'`.
+
+## Slack alerts on failure
+
+Pattern: chain `agent.run_failed` → `send_slack`:
+
+```
+Trigger:   agent.run_failed
+Filters:   none
+Actions:
+  send_slack:
+    channel: #alerts-mc-prod
+    text: |
+      :rotating_light: Agent run failed
+      Agent: {{ payload.agent_id }}
+      Run id: {{ payload.run_id }}
+      Error: `{{ payload.error_class }}: {{ payload.error_message[:200] }}`
+      [ View run ]({{ payload.run_url }})
+```
+
+Same pattern works for `automation.run_failed` (which is implicit — failed automation runs auto-emit `agent.run_failed` if a `run_agent` action was the failing step).
+
+## Idempotency + dedup
+
+Each rule has an optional `dedup_key` template. The engine hashes the rendered key + the rule id and skips dispatch if a run with that hash exists in the last 30 minutes. Useful for noisy triggers — for example, `note.status_changed` can fire many times during bulk imports.
+
+## Rate limiting
+
+Per-rule rate limits (e.g., "max 5 dispatches per minute per `client_id`") are stored on the rule and enforced in `automations.engine.dispatch` before queuing. Slack actions additionally honor a per-workspace token-bucket so we don't get rate-limited by Slack itself.
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| Engine + dispatch | `automations/engine.py` |
+| Trigger / action registries | `automations/registry.py` |
+| Triggers + signal emitters | `automations/triggers/__init__.py`, `automations/signals.py` |
+| Sweeps (cron-driven triggers) | `automations/sweeps.py` |
+| Actions | `automations/actions/*.py` |
+| Run model | `automations/models.py:AutomationRun` |
+| API views | `automations/api/views.py` |
+| WebSocket consumer | `automations/consumers.py` |
+| Live operations | `automations/live.py` |
+| Frontend automation builder | `l5ui/src/app/components/automations/` |
+| Run history view | `l5ui/src/app/components/automations/operations/` |

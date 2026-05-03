@@ -1,0 +1,204 @@
+---
+title: "Knowledge Bases"
+description: "Per-account RAG stores — chunked, embedded, retrieved via cosine kNN. Includes a Google Drive ingestion path and a graph-aware `KnowledgeEdge` layer for traversal."
+icon: "book-open"
+---
+
+A Knowledge Base (KB) is a named container of `Document`s that have been chunked, embedded, and indexed for semantic retrieval. Agents call `search_knowledge_base(query, kb_id?)` to surface the most relevant chunks for whatever they're working on.
+
+<Info>
+  KBs ship with three concrete tables (`KnowledgeBase`, `Document`, `DocumentChunk`) plus a `KnowledgeEdge` layer that materializes the kNN graph for traversal queries (Apache AGE-compatible).
+</Info>
+
+## What a KB stores
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ KnowledgeBase                                                    │
+│   - kb_id, name, description                                     │
+│   - scope: user | account | public                               │
+│   - source_type: upload | gdrive | creative_ingest               │
+│   - client_id, agency_id, owner                                  │
+└──────────────────────────────────────────────────────────────────┘
+                           │ has many
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Document                                                         │
+│   - document_id, title, source_uri, mime_type, sha256, file_size │
+│   - status: pending | chunking | embedding | ready | failed      │
+└──────────────────────────────────────────────────────────────────┘
+                           │ has many
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ DocumentChunk                                                    │
+│   - chunk_id, document, idx, text                                │
+│   - embedding: vector(3072) — text-embedding-3-large             │
+│   - HNSW pgvector index                                          │
+└──────────────────────────────────────────────────────────────────┘
+                           │ kNN edges materialized to
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ KnowledgeEdge                                                    │
+│   - from_chunk → to_chunk, relation, weight (cosine distance)    │
+│   - Used for graph traversal (recursive CTE, or AGE Cypher)      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## Three KB scopes
+
+| Scope | Visibility | Typical use |
+| --- | --- | --- |
+| `user` | Only the owner. | Personal scratchpad — research notes, docs only the user cares about. |
+| `account` | All users in the same `client_id`. | Team / client-shared knowledge. The default for most KBs. |
+| `public` | All authenticated users. | System-wide reference (taxonomy guides, attribution methodology, etc.). |
+
+The "Creative Insights" KB is a special `account`-scoped KB auto-built per tenant by the creative-analysis pipeline (one Document per analyzed creative).
+
+## Ingestion paths
+
+<AccordionGroup>
+  <Accordion title="Direct upload" icon="upload">
+    `POST /api/knowledge_base/<kb_id>/documents/` (multipart). Accepts PDF, DOCX, TXT, MD, HTML, JSON. Triggers `ingest_document.delay(...)`:
+
+    1. Fetch + parse → plain text.
+    2. Chunk (default 800 tokens, 80-token overlap).
+    3. Embed each chunk via `text-embedding-3-large` (3072-dim).
+    4. Update `Document.status` from `chunking` → `embedding` → `ready`.
+
+    Re-uploading a file with the same SHA256 is a no-op (idempotent).
+  </Accordion>
+
+  <Accordion title="Google Drive" icon="folder">
+    OAuth-based ingestion of an entire Drive folder.
+
+    1. User connects their Drive via the OAuth flow at `/api/knowledge_base/google-drive/oauth/start/`.
+    2. Picks a folder. We watch it for changes via push notifications.
+    3. New / updated files are downloaded, parsed, and ingested as Documents.
+    4. Removed files mark their Documents as `archived` (kept for audit, excluded from retrieval).
+
+    The OAuth flow + watcher logic lives in `knowledge_base/google_drive_oauth.py` + `knowledge_base/google_drive.py`. Setup notes in `knowledge_base/GOOGLE_DRIVE_SETUP.md`.
+  </Accordion>
+
+  <Accordion title="Creative ingest" icon="palette">
+    Auto-built per tenant by the creative-analysis pipeline. Each `CreativeAnalysis` row materializes a Document in the tenant's "Creative Insights" KB with the prose synthesis as the body. This means agents can `search_knowledge_base("ugc problem-solution")` and get hits across the user's analyzed creatives without going through the bespoke creative-search endpoint.
+
+    See [Creative Analytics overview](/mission-control/creative-analytics/overview).
+  </Accordion>
+
+  <Accordion title="Automation `add_to_kb` action" icon="gears">
+    Any automation can write a Document into a KB via the `add_to_kb` action — useful for archiving Slack threads, capturing meeting notes via webhook, etc.
+  </Accordion>
+</AccordionGroup>
+
+## Retrieval
+
+Agents call `search_knowledge_base(query, kb_id=None, top_k=5)`:
+
+1. Embed the query with `text-embedding-3-large`.
+2. Cosine kNN over `DocumentChunk.embedding`, filtered by accessible KBs (scope rules).
+3. Return top-K chunks with `{ document_title, chunk_text, similarity, document_id, chunk_idx }`.
+
+If `kb_id` is omitted, search runs across all KBs the user can see (user-scope + account-scope for their tenant + public).
+
+## Graph traversal
+
+`KnowledgeEdge` materializes the kNN graph. For each chunk we emit edges to its top-N nearest neighbors with cosine distance as edge weight.
+
+This enables:
+
+- **Recursive CTE traversal** — "find all chunks within 2 hops of X" via Postgres recursive CTE, no AGE required.
+- **Apache AGE Cypher** — when AGE is installed, the same graph is mirrored into AGE label/edge tables (managed by `tasks.build_graph_edges`). Agents can run Cypher for richer queries.
+
+The dual-write pattern means KB graph queries work whether or not AGE is enabled — AGE is a performance accelerator, not a correctness dependency.
+
+## Costs
+
+Per OpenAI pricing (May 2026):
+
+- Embedding: ~$0.13 per 1M tokens (text-embedding-3-large).
+- Average chunk: ~800 tokens. So ~$0.00010 per chunk.
+- A 100-page PDF (~50k tokens) → ~63 chunks → ~$0.0065 to ingest.
+
+`Document.cost_cents` *(planned)* will track per-doc ingest cost so a per-KB rollup is trivial.
+
+## Endpoints
+
+<ParamField path="GET /api/knowledge_base/" query>
+  List KBs the caller can see (filtered by scope rules).
+</ParamField>
+
+<ParamField path="POST /api/knowledge_base/" body>
+  Create a new KB. Body: `{ name, description, scope, source_type }`.
+</ParamField>
+
+<ParamField path="GET /api/knowledge_base/<kb_id>/documents/" query>
+  List documents in a KB. Paginated.
+</ParamField>
+
+<ParamField path="POST /api/knowledge_base/<kb_id>/documents/" body>
+  Upload a document (multipart `file` field) or post a URL to ingest.
+</ParamField>
+
+<ParamField path="POST /api/knowledge_base/search/" body>
+  Search across accessible KBs. Body: `{ query, kb_id?, top_k? }`.
+</ParamField>
+
+<ParamField path="GET /api/knowledge_base/google-drive/oauth/start/" query>
+  Begin the Google Drive OAuth flow.
+</ParamField>
+
+<ParamField path="GET /api/knowledge_base/google-drive/oauth/callback/" query>
+  OAuth callback — completes the connection and lets the user pick a folder.
+</ParamField>
+
+All gated by `shared.permissions.AgentSurfaceAllowed` for write paths; reads honor the per-KB scope rules so a public KB is searchable by anyone authenticated.
+
+## Bob tool
+
+```python
+@tool
+def search_knowledge_base(
+    query: str,
+    config: Annotated[RunnableConfig, InjectedToolArg],
+    kb_id: str = '',
+    top_k: int = 5,
+) -> str:
+    """Semantic search over the user's accessible knowledge bases."""
+```
+
+Returns a JSON list of chunks with their similarity scores and source document titles. Houston, Space Bob, and Social Sally all have this tool — the same query routes to the same KBs from any agent.
+
+## Operations
+
+<AccordionGroup>
+  <Accordion title="Re-ingest a stale document" icon="rotate">
+    `POST /api/knowledge_base/documents/<doc_id>/reingest/` resets the document to `pending` and re-runs the chunk+embed pipeline. Useful when chunking parameters change.
+  </Accordion>
+
+  <Accordion title="Rebuild the kNN graph" icon="diagram-project">
+    `python manage.py shell -c "from knowledge_base.tasks import build_graph_edges; build_graph_edges('<kb_id>')"` recomputes `KnowledgeEdge` rows for one KB. Run after a large ingest to reflect the new chunks in graph queries.
+  </Accordion>
+
+  <Accordion title="Enable pgvector" icon="vector-square">
+    `python manage.py enable_pgvector` runs `CREATE EXTENSION IF NOT EXISTS vector;`. The migration also includes a defensive `RunSQL` so this is rarely needed manually — but useful on managed Postgres where the migration's `RunSQL` is rolled back.
+  </Accordion>
+
+  <Accordion title="System checks" icon="circle-check">
+    `python manage.py check` surfaces:
+
+    - `agent_surface.W001` — `OPENAI_API_KEY` not set (KB ingest stores chunks without embeddings).
+    - `agent_surface.W002` — pgvector extension not enabled (search returns 503).
+  </Accordion>
+</AccordionGroup>
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| Models | `knowledge_base/models.py` (`KnowledgeBase`, `Document`, `DocumentChunk`, `KnowledgeEdge`) |
+| Ingest pipeline | `knowledge_base/tasks.py` (`ingest_document`, `chunk_document`, `embed_chunks`, `build_graph_edges`) |
+| Google Drive | `knowledge_base/google_drive.py`, `knowledge_base/google_drive_oauth.py` |
+| API views | `knowledge_base/views.py` |
+| Search tool | `ai_chat/kb_tools.py:search_knowledge_base` |
+| pgvector status check | `knowledge_base/checks.py`, `knowledge_base/pgvector_status.py` |
+| Frontend KB management | `l5ui/src/app/components/knowledge-base/` |

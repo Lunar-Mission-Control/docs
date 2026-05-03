@@ -1,0 +1,149 @@
+---
+title: "Skills"
+description: "Reusable, composable prompt + tool bundles that agents pull in as building blocks"
+icon: "wand-sparkles"
+---
+
+A Skill is a named, versioned bundle of (system prompt fragment, tool list, optional output template). Agents — both built-in and custom — pull in skills as building blocks when handling specialized tasks. Think of skills as the unix-pipe primitive of the agent surface: small, composable, single-purpose.
+
+## When to use a skill vs. a custom agent
+
+| Scenario | Skill | Custom agent |
+| --- | --- | --- |
+| Reusable behavior shared across multiple agents | ✅ | ❌ |
+| Standalone, end-to-end workflow | ❌ | ✅ |
+| Quickly testable in isolation | ✅ | ✅ |
+| Versioned + auditable | ✅ | ✅ |
+| Has its own avatar / persona | ❌ | ✅ |
+
+Build a skill when the same logic — say, "summarize a campaign in three bullets" — needs to be invoked from Houston, Space Bob, AND a custom Performance Reporter agent. Build a custom agent when the workflow is end-to-end and persona-defined.
+
+## Skill shape
+
+A `Skill` row has:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `skill_id` | UUID | Stable id. |
+| `client_id` | string | Tenant scope. |
+| `name` | string | Display name. |
+| `description` | string | What the skill does. |
+| `prompt` | text | System prompt fragment, prepended to the agent's prompt when the skill is active. |
+| `tools` | JSON list | Tool keys this skill expects/uses. |
+| `output_template` | text \| null | Optional Jinja-style template for shaping the skill's response. |
+| `version` | int | Auto-incremented on save. |
+| `is_active` | bool | |
+| `created_by`, `created_at`, `updated_at` | meta | |
+
+Skills are created via the **Skills** page in the agent surface. Saving creates a new version (the prior version is preserved for replay).
+
+## Markdown skills
+
+`skills/markdown.py` provides a renderer that converts Skill prompts written in lightweight markdown into the format LangGraph expects. Operators write skills like:
+
+```markdown
+# Skill: campaign-summary
+
+Summarize a campaign's performance in exactly three bullets:
+
+1. Spend, revenue, and ROAS for the period
+2. The top-performing creative (by ROAS)
+3. The single most actionable issue or opportunity
+
+## Tools
+- `get_campaign_performance`
+- `get_creative_performance`
+- `get_creative_insights`
+
+## Output
+- Use markdown bullets (no numbered list).
+- No preamble. Start with the first bullet.
+- If data is missing, say so explicitly.
+```
+
+The `## Tools` and `## Output` sections are parsed and applied to the underlying `Skill` model. The `## Output` block becomes the `output_template`.
+
+## Skill chaining + run replay
+
+Two endpoints make skills production-grade:
+
+- `POST /api/skills/<id>/clone/` — fork a skill so you can iterate without breaking the in-use version.
+- `POST /api/skills/<id>/run-replay/` — re-run a previous invocation through the *current* skill version (not the version that ran originally). Surfaces gains from a prompt tweak retroactively.
+
+Both are useful when tuning skill prompts: clone → tweak → replay → compare → either promote or discard.
+
+## Invocation paths
+
+Skills are passed into the LangGraph swarm at run time. The agent's tool list is augmented with the skill's tools (deduplicated), and the skill's prompt is prepended to the agent's system prompt.
+
+Three places this happens:
+
+1. **In-chat** — a user runs `/skill <name>` (the chat parser detects the slash command and loads the skill into the next turn's context).
+2. **Custom agent** — a custom agent's tool list can include `run_skill:<skill_id>`, which is a meta-tool that the agent calls when it wants to invoke a skill mid-conversation.
+3. **Automation** — the `run_agent` action accepts a `skill_id` field; if set, the skill is loaded into the one-shot run.
+
+## Endpoints
+
+<ParamField path="GET /api/skills/" query>
+  List skills the caller can see. Tenant-scoped.
+</ParamField>
+
+<ParamField path="POST /api/skills/" body>
+  Create a new skill. Body: `{ name, description, prompt, tools, output_template? }`.
+</ParamField>
+
+<ParamField path="GET /api/skills/<id>/" query>
+  Fetch a single skill (latest version).
+</ParamField>
+
+<ParamField path="GET /api/skills/<id>/versions/" query>
+  List historical versions of a skill.
+</ParamField>
+
+<ParamField path="POST /api/skills/<id>/clone/" body>
+  Fork a skill into a new id. Useful for A/B-testing prompt variants.
+</ParamField>
+
+<ParamField path="POST /api/skills/<id>/run-replay/" body>
+  Replay a prior run through the skill's current version. Returns the new run's output for diffing.
+</ParamField>
+
+All gated by `shared.permissions.AgentSurfaceAllowed`.
+
+## Worked example
+
+A "Hook Diagnoser" skill that any creative-savvy agent can call:
+
+```markdown
+# Skill: hook-diagnoser
+
+Given a creative_id, produce a 5-bullet diagnosis:
+
+1. **Archetype + confidence** — what hook archetype this is and how confident.
+2. **Strengths** — 1-2 things this hook does well.
+3. **Weaknesses** — 1-2 things hurting this hook.
+4. **Recommended fixes** — 1-2 concrete production-level changes to test.
+5. **Closest match** — the most-similar already-tested creative in the library
+   (concept-similarity, not visual-twin).
+
+## Tools
+- `recommend_next_creative_brief`
+- `find_similar_creatives`
+- `analyze_hook_exhaustion`
+
+## Output
+Use ` - ` bullets. No preamble. Reference the creative_id in the title.
+```
+
+Wired into Space Bob via `tools: ['run_skill:hook-diagnoser', ...]`. When a user says "diagnose creative-abc-123", Space Bob calls the skill, which calls `find_similar_creatives` + `recommend_next_creative_brief` and shapes the response per the skill's output template.
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| Model | `skills/models.py` |
+| Markdown parser | `skills/markdown.py` |
+| API views | `skills/views.py` |
+| URL routes | `skills/urls.py` |
+| Frontend skill editor | `l5ui/src/app/components/skills/` |
+| Swarm wiring | `ai_chat/graph.py` |

@@ -1,0 +1,375 @@
+---
+title: "Operations & Backfill"
+description: "Management commands, Celery beat schedule, deployment notes, cost monitoring, and troubleshooting"
+icon: "terminal"
+---
+
+The creative-analysis pipeline ships with three operator-grade management commands plus the beat schedule that keeps everything fresh. This page is the production runbook.
+
+## Management commands
+
+### `seed_creative_test_data` — local seeding
+
+Creates synthetic `AdCreativeFields` rows pointing at stable Picsum image URLs plus matching `Ads_AdTracker` rows shaped to actually trigger interesting signals (some archetypes decline so exhaustion lights up, others have flat ROAS).
+
+```bash
+# Seed 30 creatives + 28 days of perf for a fake client:
+python manage.py seed_creative_test_data --client-id test-creative-1
+
+# Larger seed and run the full pipeline:
+python manage.py seed_creative_test_data --client-id test-creative-1 \
+    --count 50 --days 28 --analyze
+
+# Wipe and re-seed:
+python manage.py seed_creative_test_data --client-id test-creative-1 --reset
+
+# Reproducible seed for tests:
+python manage.py seed_creative_test_data --client-id test-creative-1 \
+    --seed 42 --count 8 --reset
+```
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--client-id` | (required) | Tenant id. Use a fake id for local testing. |
+| `--count` | 30 | Number of `AdCreativeFields` to create. |
+| `--days` | 28 | Days of perf history. |
+| `--reset` | false | Delete prior seed for this tenant first. |
+| `--analyze` | false | Enqueue `analyze_creatives_batch` after seeding. |
+| `--seed` | random | RNG seed for reproducibility. |
+
+The seeded perf is shaped so:
+
+- Spend is Pareto-skewed (a handful of ads carry most of the budget).
+- 60% of ads convert; the rest are duds.
+- `before_after` and `urgency` archetypes have a 4-week declining ROAS curve so hook exhaustion fires.
+- Other archetypes hold roughly steady or improve.
+
+### `run_creative_pipeline` — end-to-end orchestrator
+
+Runs all five pipeline stages for one tenant or all tenants. Prints a per-tenant cost preview up front and prompts for confirmation if the bill exceeds $5.
+
+```bash
+# Cost preview only (no API spend):
+python manage.py run_creative_pipeline --client-id 123 --dry-run
+
+# Run for one tenant:
+python manage.py run_creative_pipeline --client-id 123
+
+# Run for every tenant with creatives in the last 60 days:
+python manage.py run_creative_pipeline --all-clients
+
+# Skip an expensive stage (e.g. vision is already done):
+python manage.py run_creative_pipeline --client-id 123 --skip-analyze
+
+# Skip the confirmation prompt (CI / cron):
+python manage.py run_creative_pipeline --client-id 123 --yes
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--client-id <id>` | Single tenant. |
+| `--all-clients` | Every tenant with `ad_updated_time` in the last 60 days. |
+| `--dry-run` | Print cost table only. No spending. |
+| `--skip-analyze` | Skip stage 1 (vision). |
+| `--skip-embed` | Skip stage 2 (embeddings). |
+| `--skip-exhaustion` | Skip stage 3 (hook exhaustion). |
+| `--skip-concepts` | Skip stage 4 (concept clusters). |
+| `--skip-brief` | Skip stage 5 (daily brief). |
+| `--analyze-since <date>` | Vision-analyze only creatives updated on/after this date. |
+| `--analyze-force` | Re-run vision even if `CreativeAnalysis` exists. |
+| `--limit <n>` | Cap creatives per stage. Default 10000. |
+| `--yes` | Bypass the confirmation prompt. |
+
+Stages 1+2 enqueue Celery tasks (you need a worker on `automations_standard` and `automations_low`). Stages 3+4+5 run synchronously, so the brief is materialized when the command exits.
+
+### `creative_pipeline_status` — read-only status
+
+```bash
+# All tenants:
+python manage.py creative_pipeline_status
+
+# One tenant:
+python manage.py creative_pipeline_status --client-id 123
+
+# JSON for piping:
+python manage.py creative_pipeline_status --json | jq
+```
+
+Per-tenant report:
+
+```
+client_id=test-creative-1
+  creatives:      total=30     with_media=30     videos=0
+  analyzed:       total=30     last_30d=30
+  embeddings:     analysis_text=30      image=30
+  exhaustion:     snapshots=8       exhausted_archetypes=2
+  concepts:       clusters=4
+  latest_brief:   2026-05-03 [published] Lean into UGC testimonials
+  openai cost 30d: $0.7421
+```
+
+### `backfill_creative_embeddings` — embedding-only backfill
+
+Used during the v1 → v2 cutover (or any time you need to retroactively embed old `CreativeAnalysis` rows without running vision again).
+
+```bash
+python manage.py backfill_creative_embeddings --client=123 --limit=10000
+python manage.py backfill_creative_embeddings --dry-run
+python manage.py backfill_creative_embeddings --batch=50 --sleep=1.5
+```
+
+v2 is **kind-aware**: a creative is only "already embedded" when both `analysis_text` AND `image` rows exist. Pre-v2 single-kind rows are picked up so the missing kind lands on the next run.
+
+### `analyze_creatives` — vision-only backfill
+
+Standalone wrapper for the vision-only stage of the pipeline. `run_creative_pipeline` calls this internally; you can invoke directly when you only want vision.
+
+```bash
+python manage.py analyze_creatives --client-id 123
+python manage.py analyze_creatives --client-id 123 --since 2026-04-01
+python manage.py analyze_creatives --client-id 123 --force   # re-run even if CreativeAnalysis exists
+```
+
+## Celery beat schedule
+
+```python
+# layerfive/celery.py
+app.conf.beat_schedule = {
+    # … existing entries …
+
+    # Hourly sweep of unanalyzed creatives — backstop the post_save signal.
+    'kb-sweep-unanalyzed-creatives': {
+        'task': 'knowledge_base.sweep_unanalyzed_creatives',
+        'schedule': crontab(minute=25),
+    },
+
+    # Hourly sweep of unembedded analyses.
+    'kb-sweep-unembedded-creatives': {
+        'task': 'knowledge_base.sweep_unembedded_creatives',
+        'schedule': crontab(minute=45),
+    },
+
+    # Hourly hook-exhaustion refresh.
+    'creative-refresh-hook-exhaustion': {
+        'task': 'marketing_resources.refresh_hook_exhaustion_cache',
+        'schedule': crontab(minute=30),
+    },
+
+    # Hourly daily-brief fan-out (per-tenant timezone gating).
+    'creative-daily-brief-fanout': {
+        'task': 'marketing_resources.fanout_daily_briefs',
+        'schedule': crontab(minute=10),
+    },
+
+    # Weekly concept-cluster refresh.
+    'creative-refresh-concepts': {
+        'task': 'marketing_resources.refresh_creative_concepts',
+        'schedule': crontab(hour=11, minute=0, day_of_week='mon'),
+    },
+}
+```
+
+| Cron | Cadence | What runs |
+| --- | --- | --- |
+| `kb-sweep-unanalyzed-creatives` | Hourly :25 | Find `AdCreativeFields` with media but no analysis; enqueue analysis. |
+| `kb-sweep-unembedded-creatives` | Hourly :45 | Find `CreativeAnalysis` rows missing `analysis_text` embedding; enqueue. |
+| `creative-refresh-hook-exhaustion` | Hourly :30 | Recompute `HookExhaustionSnapshot` per (client × archetype). Fires `creative.hook_exhausted` on transitions. |
+| `creative-daily-brief-fanout` | Hourly :10 | Per-tenant timezone gate — enqueue `generate_brief_for_client` only when local-time hour matches the tenant's configured digest hour. |
+| `creative-refresh-concepts` | Weekly Mon 11:00 UTC | k-means + GPT naming pass over each tenant's analysis-text embeddings. |
+
+The hourly cadence + idempotency means a worker outage of up to ~60 minutes recovers automatically on the next tick. Don't run multiple beat workers — django-celery-beat's `DatabaseScheduler` is the single source of truth.
+
+## Task queues
+
+Per `task_routes` in `layerfive/celery.py`:
+
+```python
+'knowledge_base.analyze_creative':              'automations_standard'
+'knowledge_base.analyze_creatives_batch':       'automations_standard'
+'knowledge_base.sweep_unanalyzed_creatives':    'automations_low'
+'knowledge_base.sweep_unembedded_creatives':    'automations_low'
+'marketing_resources.embed_creative':           'automations_standard'
+'marketing_resources.refresh_hook_exhaustion_cache':   'automations_low'
+'marketing_resources.fanout_daily_briefs':      'automations_low'
+'marketing_resources.generate_brief_for_client':       'automations_low'
+'marketing_resources.refresh_creative_concepts':       'automations_low'
+```
+
+In production, run separate worker processes for `automations_standard` (latency-sensitive ingest path) and `automations_low` (batch sweeps + briefs).
+
+## Deployment checklist
+
+When deploying the v2 pipeline to a new environment:
+
+<Steps>
+  <Step title="Postgres has pgvector">
+    `CREATE EXTENSION IF NOT EXISTS vector;` is included as a defensive `RunSQL` in migration `0012_creative_v2_schema`. If you're on a managed Postgres that doesn't allow extensions by default, enable pgvector at the DB level first (Supabase / RDS / Cloud SQL all support it).
+
+    Verify with: `python manage.py check` — `agent_surface.W002` warns if the extension isn't loaded.
+  </Step>
+  <Step title="ffmpeg is on the path">
+    Required for video keyframe extraction. The `Dockerfile` should `apt-get install ffmpeg`. Without ffmpeg, video assets degrade gracefully to thumbnail-only analysis (you lose frame-by-frame observations and the spoken_hook signal).
+
+    Verify: `which ffmpeg && which ffprobe`.
+  </Step>
+  <Step title="OPENAI_API_KEY is configured">
+    Required for vision, Whisper, embeddings, brief generation, and concept naming.
+
+    Verify: `python manage.py check` — `agent_surface.W001` warns if the key is missing.
+  </Step>
+  <Step title="Migrations applied">
+    `python manage.py migrate marketing_resources` (also picks up the `knowledge_base` migration adding cost / transcript columns).
+
+    The migrations are idempotent — re-running on an already-migrated DB is a no-op.
+  </Step>
+  <Step title="Beat scheduler enabled">
+    Run `celery -A layerfive beat --loglevel=info` exactly once per cluster. The schedule in `layerfive/celery.py` registers itself; user-created automations also write `PeriodicTask` rows that the same scheduler picks up.
+  </Step>
+  <Step title="Workers running on both queues">
+    `celery -A layerfive worker -Q automations_standard,automations_low --concurrency=4`
+
+    Adjust concurrency based on OpenAI rate limits.
+  </Step>
+</Steps>
+
+## Backfilling production
+
+For a fresh tenant or a v1 → v2 migration:
+
+```bash
+# 1. Estimate cost.
+python manage.py run_creative_pipeline --client-id <prod-client> --dry-run
+
+# 2. If the bill is acceptable, run for real.
+#    Stages 1-2 enqueue Celery tasks; 3-5 run inline.
+python manage.py run_creative_pipeline --client-id <prod-client>
+
+# 3. Watch the workers process the queues.
+#    A 5000-creative tenant typically takes 1-2 hours at 4-worker concurrency.
+
+# 4. Check progress at any time:
+python manage.py creative_pipeline_status --client-id <prod-client>
+
+# 5. Once stages 1-2 are done, re-run the synchronous stages.
+python manage.py run_creative_pipeline --client-id <prod-client> \
+    --skip-analyze --skip-embed
+```
+
+For all tenants at once:
+
+```bash
+python manage.py run_creative_pipeline --all-clients --dry-run
+python manage.py run_creative_pipeline --all-clients --yes
+```
+
+## Cost monitoring
+
+Cost is captured on every artifact:
+
+- `CreativeAnalysis.cost_cents` — vision + Whisper combined, per creative.
+- `CreativeEmbedding.cost_cents` — embedding call, per kind per creative.
+- `CreativeBrief.cost_cents` — daily brief, per tenant per day.
+
+Per-tenant 30-day rollup is available via:
+
+```python
+from marketing_resources.tasks.embed_creative import creative_cost_for_client
+creative_cost_for_client('client-A')
+# {'vision_cents': 24.5, 'embed_cents': 0.4, 'total_cents': 24.9, ...}
+```
+
+…or as an HTTP endpoint:
+
+```
+GET /api/marketing_resources/creatives/cost/?client_id=<id>&since_days=30
+```
+
+…or surfaced in the analytics page's "OpenAI spend (30d)" KPI tile.
+
+For multi-tenant rollup, use `creative_pipeline_status --json` and aggregate the `cost_30d_usd` field across rows.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No creatives are being analyzed automatically" icon="triangle-exclamation">
+    Check, in order:
+
+    1. Is a Celery worker running on `automations_standard`? (The signal enqueues there.)
+    2. Is the `interaction_insight` app loaded? `apps.py:ready()` raises on missing imports — if startup logs show a stack trace there, fix it before relying on the signal.
+    3. Does the `AdCreativeFields` row actually have `s3_image_url` or `s3_video_url`? The signal short-circuits without media.
+    4. Does the row have a `client_id`? The signal also short-circuits without it.
+    5. If saves come from a code path passing `update_fields`, the v2 signal short-circuits unless one of the media URL fields is in the list. Audit the call site.
+
+    Belt-and-suspenders: `kb-sweep-unanalyzed-creatives` runs hourly and picks up missed creatives. If even that's not running, check the beat scheduler.
+  </Accordion>
+
+  <Accordion title="Vision call returns _unparseable" icon="triangle-exclamation">
+    The model occasionally returns markdown-fenced JSON or invalid JSON despite `response_format='json_object'`. v2 catches that and returns `{'_unparseable': '<first 5000 chars>'}`. The analysis is *not* persisted in this case — re-run with `--analyze-force` to retry.
+
+    Recurring unparseable responses on the same asset usually mean the model couldn't fetch the image (private S3 URL, dead link). Test the URL with `curl -I` from the worker host.
+  </Accordion>
+
+  <Accordion title="Hook exhaustion never fires" icon="triangle-exclamation">
+    All three gates must hold simultaneously:
+
+    - `composite ≥ 0.6` — high enough composite score.
+    - `spend_share ≥ 0.20` — enough budget on this archetype.
+    - `roas_slope < 0` — actually declining.
+
+    A common confusion: a flat-ROAS but high-spend archetype is *dominant*, not exhausted. The trigger is intentionally narrow — it fires when an archetype is genuinely failing. Use the analytics page's per-archetype rows to see which gate is missing.
+  </Accordion>
+
+  <Accordion title="Brief shows status='failed'" icon="triangle-exclamation">
+    The generator persists a row with `status='failed'` if the LLM call errored. The headline includes the error class. Common causes:
+
+    - `OPENAI_API_KEY` not set (system check W001 should have warned at boot).
+    - Rate limit (`429`). Retry; the existing token bucket usually recovers within seconds.
+    - Network timeout. Re-running with the Regenerate button typically succeeds on retry.
+
+    To force a clean retry: `POST /daily-brief/regenerate/` with body `{ "client_id": "..." }`.
+  </Accordion>
+
+  <Accordion title="Concept clusters are missing names" icon="triangle-exclamation">
+    The naming pass is best-effort. If the GPT-4o-mini call fails for a cluster, the row is persisted with `name="Cluster N"` and `summary=""`. The page still renders it. The next weekly refresh tries again.
+
+    Force an immediate retry: `POST /concept-clusters/refresh/`.
+  </Accordion>
+
+  <Accordion title="Frontend shows 'permission denied'" icon="triangle-exclamation">
+    The page module gate uses `validateAccessPermission` (not the strict `validateBlockAccessPermission`). Super admins always pass. For other users, `permissions['creative-reporting']?.view` must be true — same gate as the existing Creative Library.
+
+    See [Permissions](/mission-control/agent-surface/permissions) for the full agent-surface gate.
+  </Accordion>
+
+  <Accordion title="Sidebar entry doesn't appear" icon="triangle-exclamation">
+    The "Ad Creative Analytics" entry is a top-level item gated by `is_superuser || creative-reporting.view`. If you can see Creative Library but not Analytics, either the bundle is stale (hard-refresh) or the user logged in before the entry shipped (re-login).
+  </Accordion>
+</AccordionGroup>
+
+## Tunable settings
+
+All read from Django settings if defined:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | unset | Required for all OpenAI calls. |
+| `OPENAI_VISION_MODEL` | `gpt-4o` | Vision model for analyze_creative. |
+| `OPENAI_TRANSCRIBE_MODEL` | `whisper-1` | Audio transcription model. |
+| `CREATIVE_BRIEF_MODEL` | `gpt-4o` | Daily brief generation. |
+| `CONCEPT_NAMING_MODEL` | `gpt-4o-mini` | Concept-cluster naming. |
+| `OPENAI_VISION_PRICING` | `{...}` | Cents per 1M tokens (in/out) per model. Used for cost computation. |
+| `AUTO_TAG_CONFIDENCE_FLOOR` | 0.6 | Global floor (overridden per-category). |
+| `CREATIVE_PIPELINE_COST_RATES` | `{...}` | Per-stage cents-per-item rates used by `run_creative_pipeline --dry-run`. |
+
+## Where the code lives
+
+| File | Purpose |
+| --- | --- |
+| `marketing_resources/management/commands/seed_creative_test_data.py` | Local seeding. |
+| `marketing_resources/management/commands/run_creative_pipeline.py` | Unified pipeline runner. |
+| `marketing_resources/management/commands/creative_pipeline_status.py` | Status report. |
+| `marketing_resources/management/commands/backfill_creative_embeddings.py` | Embedding-only backfill (kind-aware). |
+| `knowledge_base/management/commands/analyze_creatives.py` | Vision-only backfill. |
+| `knowledge_base/management/commands/enable_pgvector.py` | One-time pgvector extension enable (defensive). |
+| `layerfive/celery.py` | Beat schedule + task routes. |
+| `knowledge_base/checks.py` | Startup system checks (`agent_surface.W001`, `W002`). |

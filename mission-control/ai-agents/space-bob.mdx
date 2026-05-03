@@ -76,7 +76,56 @@ Space Bob is the creative specialist. It analyzes ad creative performance, compa
 
     **Tools used**: `create_visualization`
   </Accordion>
+
+  <Accordion title="Deep-dive creative analysis (v2)" icon="chart-radar">
+    Backed by the [Creative Analytics pipeline](/mission-control/creative-analytics/overview), Bob has 8 deep-dive tools that operate on the persisted analysis layer — vision tags, embeddings, exhaustion snapshots, named concept clusters, and the daily Creative Brief.
+
+    Use these when the user asks "what should I make next?", "is my creative tired?", "find ads like this one", or "what concepts am I testing?"
+
+    **Tools used**: `find_similar_creatives`, `search_creatives_semantic`, `analyze_hook_exhaustion`, `creative_diversity_score`, `creative_concept_clusters`, `compare_creatives`, `top_creatives_by_archetype`, `recommend_next_creative_brief`
+  </Accordion>
 </AccordionGroup>
+
+## Creative deep-dive tools
+
+These 8 tools sit on top of the [Creative Analytics pipeline](/mission-control/creative-analytics/overview) — every ingested creative is auto-analyzed (multi-frame vision + Whisper transcript), tagged across an 8-category taxonomy, embedded into pgvector, and rolled into hook-exhaustion snapshots and named concept clusters.
+
+| Tool | Description |
+|------|-------------|
+| `find_similar_creatives(creative_id, kind?)` | Cosine kNN over `CreativeEmbedding`. `kind='analysis_text'` (default) for concept similarity, `kind='image'` for visual twins / near-duplicates. |
+| `search_creatives_semantic(query, kind?)` | Free-text search. Same `kind` toggle as above. |
+| `analyze_hook_exhaustion(client_id?)` | Latest `HookExhaustionSnapshot` per archetype — spend share, ROAS slope, net-new ratio, exhaustion score, recommended alternatives. See [Hook Exhaustion](/mission-control/creative-analytics/hook-exhaustion). |
+| `creative_diversity_score(client_id?, since_days?)` | 0–1 score of how diverse the live creatives are (entropy over hook archetypes). Low score → library is repeating itself. |
+| `creative_concept_clusters(client_id?)` | Named clusters from the weekly k-means + GPT naming pass. Returns name, summary, member count, 30-day spend + ROAS. See [Concept Clusters](/mission-control/creative-analytics/concept-clusters). |
+| `compare_creatives(creative_id_a, creative_id_b)` | Side-by-side: shared tags, distinct tags, cosine similarity score. |
+| `top_creatives_by_archetype(archetype_slug, client_id?, limit?)` | Top creatives in an archetype by 60-day ROAS. |
+| `recommend_next_creative_brief(client_id?, force_regenerate?)` | Today's persisted [Creative Brief](/mission-control/creative-analytics/creative-brief) — recommended archetype / format / audience / messaging theme + hook concept + evidence-backed rationale + risks + inspirations. The same brief shown on the analytics page and posted to Slack. |
+
+### When to call which
+
+<Steps>
+  <Step title='User asks "what should I make next?"'>
+    Call `recommend_next_creative_brief` first — that's the canonical answer. It already aggregates exhaustion + diversity + top performers into a structured recommendation.
+
+    Optionally enrich with `analyze_hook_exhaustion` + `creative_concept_clusters` if the user wants the supporting context.
+  </Step>
+  <Step title='User asks "is my creative tired?"'>
+    Call `analyze_hook_exhaustion` and surface any `is_exhausted=True` rows with their `recommended_alternatives`. If everything is healthy, call `creative_diversity_score` — concentration without exhaustion is still a signal.
+  </Step>
+  <Step title='User shares a creative_id and asks for context'>
+    Call `find_similar_creatives` with `kind='analysis_text'` (concept similarity). Optionally also `kind='image'` if the user wants to find visual twins specifically.
+  </Step>
+  <Step title='User asks for free-text search'>
+    Call `search_creatives_semantic` with the user's phrase. Default `kind='analysis_text'` for "ads about X"; switch to `kind='image'` for "ads that look like Y".
+  </Step>
+  <Step title='User wants to see the concept landscape'>
+    Call `creative_concept_clusters`. Returns named clusters with spend + ROAS. If empty, the response includes a hint to refresh — pass it through.
+  </Step>
+</Steps>
+
+### Tenant scoping
+
+Every tool reads from `RunnableConfig.client_id` (propagated from the JWT) and resolves accessible clients via `shared.auth.get_accessible_client_ids`. Cross-tenant queries are impossible — the source-creative lookup, the kNN query, and any aggregation all filter on `client_id__in=accessible`.
 
 ## Tool reference
 
