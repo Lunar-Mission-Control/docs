@@ -1,0 +1,174 @@
+---
+title: "Embeddings & Similarity"
+description: "Two-kind pgvector layer powering concept similarity, visual-twin lookups, semantic search, and the net-new-ratio signal"
+icon: "vector-square"
+---
+
+Every analyzed creative produces **two** pgvector embeddings, queryable independently. Both are stored in the `creative_embedding` table as `CreativeEmbedding` rows, indexed with HNSW for cosine similarity.
+
+| Kind | What it embeds | Used for |
+| --- | --- | --- |
+| `analysis_text` | Prose synthesis of the analysis JSON (3–6 sentences + transcript). | Concept similarity, free-text semantic search, k-means concept clusters, net-new-ratio in hook exhaustion. |
+| `image` | Visually-flavored doc (format notes, frame observations, palette, OCR copy, hook archetype). | Visual-twin / near-duplicate detection — "find ads that look like this one." |
+
+Both kinds use OpenAI `text-embedding-3-small` (1536-dim) — same vector space so the `embedding` column shape stays uniform. Cost is ~$0.0001 per kind per creative.
+
+<Info>
+  Embeddings are SHA-cached on `(creative_id, model, kind)` plus `asset_sha256`. Re-firing on unchanged content is a no-op — the row's SHA matches and we short-circuit before the OpenAI call.
+</Info>
+
+## Why two kinds, not one
+
+The first version embedded only `analysis_text`. Two real failure modes:
+
+1. **Visual-twin detection was impossible.** Two creatives with very different on-screen copy but identical visuals (same B-roll re-used with new captions) had distant `analysis_text` embeddings. There was no way to find "the same shot reused on a different ad."
+2. **Free-text search returned label noise.** The original embedding doc looked like `"**Hooks:** ...\n**Themes:** ..."` — those literal labels dominated the vector. Searching for `"problem solution fitness ugc"` matched on `"Hooks:"` rather than content.
+
+v2 fixes both:
+
+- Adds `kind='image'` — a doc that emphasizes visual signal so cosine over it actually means "looks similar."
+- Rewrites the `analysis_text` doc as plain prose (no `**Field:**` labels). See [`build_embedding_doc`](#how-the-embedding-docs-are-built) below.
+
+## How the embedding docs are built
+
+Both docs are built from the same `CreativeAnalysis.analysis` JSON. Different aspects are emphasized.
+
+**`analysis_text` doc** (concept-similarity-flavored, built by `build_embedding_doc(ca)` in `knowledge_base/creative_analysis.py`):
+
+> A founder demonstrating the product. The hook is a demonstration — founder picks up the bottle. Hooks include product reveal, before/after split. Themes are ugc, product reveal, lifestyle. On screen the creative says: "Made for athletes". The call to action is "Shop now". Format notes: vertical, fast cuts. The palette uses #000000, #ffffff. Brand mentions: acme. Strengths: clear product reveal; punchy CTA. Weaknesses: weak text contrast in the lower third.
+>
+> Transcript: hi this is a test, we have been using this for three months and it changed everything ...
+
+**`image` doc** (visual-twin-flavored, built by `_build_image_doc(ca)` in `marketing_resources/tasks/embed_creative.py`):
+
+> Format: vertical, fast cuts. Palette: #000000, #ffffff, #ef4444, #ec4899. At t=0.0s: founder picks up bottle in close-up. At t=2.3s: cut to product on counter, white background. At t=5.0s: text overlay reads "Made for athletes" with bold sans-serif. On-screen: "Made for athletes". CTA: "Shop now". Hook archetype: demonstration. 1 person in frame.
+
+The `image` doc deliberately leaves out summary, themes, and transcript — purely visual signal so cosine over it ranks creatives that *look* similar (same staging, palette, on-screen typography) regardless of their messaging.
+
+## Idempotent upsert
+
+```python
+def _upsert_embedding(*, ca, creative_id, kind, model, doc, sha):
+    existing = CreativeEmbedding.objects.filter(
+        creative_id=creative_id, model=model, kind=kind,
+    ).first()
+    if existing and existing.asset_sha256 == sha:
+        return cached                            # SHA hit, no API call
+
+    vector, tokens_in = _embed(doc, model=model)
+    cost_cents = compute_cost(tokens_in)
+
+    if existing is None:
+        try:
+            row = CreativeEmbedding.objects.create(...)
+        except IntegrityError:                   # concurrent re-fire
+            existing = CreativeEmbedding.objects.get(creative_id, model, kind)
+    if existing:
+        existing.update(vector, sha, tokens_in, cost_cents).save()
+```
+
+The `IntegrityError` catch matters: the post_save signal and the hourly `sweep_unembedded_creatives` cron can both fire `embed_creative` for the same creative within seconds. The unique constraint on `(creative_id, model, kind)` would otherwise raise.
+
+## pgvector configuration
+
+- Extension: `CREATE EXTENSION IF NOT EXISTS vector;` — included as a defensive `RunSQL` in migration `0012_creative_v2_schema` (idempotent on environments that already have it).
+- Index: HNSW with `m=16, ef_construction=64, opclasses=['vector_cosine_ops']`.
+- Column type: `pgvector.django.vector.VectorField(dimensions=1536)`.
+
+The pgvector dependency is pinned at `pgvector==0.3.6` in `requirements.txt`. The model file (`creative_embedding.py`) imports it without a try/except — production environments always have it.
+
+A startup Django system check (`knowledge_base/checks.py`) warns if pgvector isn't loaded, with a hint to run `python manage.py enable_pgvector`.
+
+## Endpoints
+
+<ParamField path="GET /api/marketing_resources/creatives/<creative_id>/similar/" query>
+  Cosine kNN over `CreativeEmbedding`.
+
+  **Query params:**
+  - `limit` — 1–50, default 10.
+  - `kind` — `analysis_text` (default) or `image`.
+
+  Tenant-scoped: the source-creative lookup AND the kNN query both filter by `client_id IN <accessible>`. Cross-tenant kNN is impossible.
+
+  Returns `{ source_creative_id, results: [{ creative_id, ad_name, image_url, similarity, top_overlapping_tags }] }`.
+</ParamField>
+
+<ParamField path="POST /api/marketing_resources/creatives/search/" body>
+  Free-text semantic search.
+
+  Body: `{ "query": "ugc problem-solution fitness", "limit": 25, "kind": "analysis_text" }`.
+
+  Returns `{ query, results: [{ creative_id, ad_name, image_url, similarity }] }`. Same tenant scoping as `/similar/`.
+</ParamField>
+
+Both endpoints are powered by `pgvector.django.CosineDistance` annotations:
+
+```python
+qs = CreativeEmbedding.objects.filter(kind=kind).exclude(creative_id=src.creative_id)
+if accessible:
+    qs = qs.filter(client_id__in=accessible)
+qs = qs.annotate(distance=CosineDistance('embedding', src.embedding)).order_by('distance')[:limit]
+```
+
+`similarity = 1.0 − distance`. Cosine distance ranges 0..2; similarity 1..−1 (we cap to 0..1 in the response).
+
+## Bob tools
+
+```python
+@tool
+def find_similar_creatives(creative_id, config, limit=10, kind='analysis_text'): ...
+
+@tool
+def search_creatives_semantic(query, config, limit=20, kind='analysis_text'): ...
+
+@tool
+def compare_creatives(creative_id_a, creative_id_b, config): ...
+```
+
+`find_similar_creatives` and `search_creatives_semantic` mirror the HTTP endpoints with the same `kind` toggle. `compare_creatives` returns side-by-side tag overlap + cosine similarity for two specific creative ids — useful for "why did A perform better than B?" conversations.
+
+## Backfill / sweep
+
+Two paths populate embeddings:
+
+1. **Inline (post-analysis).** When `analyze_creative` finishes, it calls `embed_creative.delay(...)` for the same creative.
+2. **Belt-and-suspenders sweep.** Hourly cron `kb-sweep-unembedded-creatives` finds `CreativeAnalysis` rows missing an `analysis_text` embedding and queues `embed_creative` for each. Catches signal misses (worker restarts, transient enqueue failures).
+
+There's also a one-time backfill command for production cutover:
+
+```bash
+python manage.py backfill_creative_embeddings --client=123 --limit=10000
+python manage.py backfill_creative_embeddings --dry-run    # preview counts
+```
+
+In v2 this is **kind-aware**: a creative is only "already embedded" when both `analysis_text` AND `image` rows exist. Pre-v2 single-kind rows are picked up so the missing kind lands on the next run.
+
+## Net-new ratio (used by hook exhaustion)
+
+The `_net_new_ratio(client_id, archetype, items)` function in `refresh_hook_exhaustion.py` is the most subtle consumer:
+
+For each in-window creative in this archetype, find its closest cosine neighbor among **same-tenant**, **same-kind=`analysis_text`**, **out-of-window** prior creatives. If the nearest distance ≥ 0.15, the creative is "net new." The fraction of in-window creatives that are net new is the ratio.
+
+A high ratio (close to 1.0) means the tenant is iterating with genuinely new expressions. A low ratio means they're recycling. Net-new ratio is one of the three composite signals that drive `is_exhausted`.
+
+The `kind='analysis_text'` filter and tenant scope are both critical here — using the image kind would conflate visual remixes with concept iteration, and skipping the tenant filter would compare against other tenants' libraries.
+
+## Tenant scoping
+
+Every read path filters by `client_id`:
+
+- **`creative_similar`** — both the source-creative lookup AND the kNN query filter by `accessible` clients.
+- **`creative_search`** — the kNN query filters by `accessible`.
+- **`find_similar_creatives` Bob tool** — same.
+- **`_net_new_ratio`** — explicit `client_id=str(client_id)` on both queries.
+
+A v1 bug let `find_similar_creatives` source-creative lookup walk past tenant boundaries; v2 fixed that. There's a regression test in `marketing_resources/tests_creative_views.py` that asserts cross-tenant calls return empty.
+
+## Where the code lives
+
+- `marketing_resources/models/creative_embedding.py` — `CreativeEmbedding` + the `KIND_*` constants.
+- `marketing_resources/tasks/embed_creative.py` — `embed_creative`, `_build_analysis_text`, `_build_image_doc`, `_upsert_embedding`, `_embed`.
+- `marketing_resources/views/creative_similarity.py` — `creative_similar`, `creative_search`.
+- `knowledge_base/creative_analysis.py:build_embedding_doc` — the prose synthesis used for `analysis_text`.
+- `knowledge_base/creative_analysis.py:sweep_unembedded_creatives` — the cron sweep.
+- `marketing_resources/management/commands/backfill_creative_embeddings.py` — one-time backfill.

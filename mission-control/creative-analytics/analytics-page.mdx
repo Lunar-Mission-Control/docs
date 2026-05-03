@@ -1,0 +1,224 @@
+---
+title: "Ad Creative Analytics page"
+description: "Frontend tour of /ad-creative-analytics — KPIs, brief panel, exhaustion chart, concept clusters, semantic search, explain drawer"
+icon: "chart-mixed"
+---
+
+The Ad Creative Analytics page (`/ad-creative-analytics`) is the operator-facing surface of the creative pipeline. It shows the same persisted artifacts (CreativeBrief, HookExhaustionSnapshot, CreativeConcept, CreativeAnalysis, CreativeEmbedding) that Bob and Slack consume, all in one dashboard.
+
+<Info>
+  The page is gated by `is_superuser || creative-reporting.view`. It lives under the existing Creative Reporting permission so any user who can already see Creative Reporting sees this page too.
+</Info>
+
+## Layout
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Marketing Attribution · Ad Creative Analytics            [date range]  │
+├──────────────────────────────────────────────────────────────────────────┤
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                  │
+│  │ Active │ │Exhausted│ │Spend   │ │Brief    │ │OpenAI  │                  │
+│  │ creat. │ │arch.    │ │share on│ │recommend│ │spend   │                  │
+│  │   42   │ │   2     │ │ exhaus.│ │ test... │ │$5.21   │                  │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘                  │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CREATIVE BRIEF · 2026-05-03                       [History] [Regener.]  │
+│  Lean into UGC testimonials                                              │
+│  [archetype: testimonial] [format: ugc] [audience: millennial] [theme:..] │
+│  Hook concept: open with a real customer holding the product...          │
+│  Why:                                Risks:                              │
+│    • exhausted: curiosity_gap          • testimonial casts may need...   │
+│    • testimonial 0% underperformers                                      │
+│    • top performer creative-A: 3.4 ROAS                                  │
+│  Inspirations: [thumb] [thumb] [thumb] (top performers)                  │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Hook Exhaustion              [bar chart: archetype × exhaustion_score]  │
+│  + per-archetype rows w/ spend share, ROAS slope, alternatives          │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Concept Clusters     [Recluster now]   [bubble: spend × ROAS, sized]   │
+│  + 3-col grid of concept cards (name, summary, members, spend, ROAS)    │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Find creatives by meaning          [toggle: Concept | Visual twins]    │
+│  [search box]   →  [thumb] [thumb] [thumb] ... (top 12 matches)         │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+Click any creative thumbnail anywhere on the page to open the **Explain drawer** (right side):
+
+```
+┌────────────────────────────────────────────────────────┐
+│ <ad name>                                          [×] │
+│ [creative thumbnail]                                   │
+│                                                        │
+│ <one-sentence summary>                                 │
+│                                                        │
+│ Strengths                                              │
+│   • clear product reveal                               │
+│   • strong CTA contrast                                │
+│ Weaknesses                                             │
+│   • no spoken hook in first 2s                         │
+│ Recommended fixes                                      │
+│   • add captions over the silent intro                 │
+│                                                        │
+│ Tags                                                   │
+│   [hook_type: testimonial · 88%]  [format: ugc · 92%]  │
+│   [emotion: relatable · 55%]      ...                  │
+│                                                        │
+│ Archetype benchmark                                    │
+│   spend share: 24%  exhaustion: 38%  [healthy]         │
+│                                                        │
+│ Transcript                                             │
+│   "I have been using this for three months..."         │
+│                                                        │
+│ Similar creatives                                      │
+│   [thumb] [thumb] [thumb] [thumb] [thumb]              │
+└────────────────────────────────────────────────────────┘
+```
+
+## Sections in detail
+
+### 1. KPI tiles
+
+5 tiles powered by an `app-trend-card` per slot:
+
+| Tile | Source | Computation |
+| --- | --- | --- |
+| Active creatives (30d) | `HookExhaustionSnapshot` | Sum of `creatives_count` across all snapshots. |
+| Exhausted archetypes | `HookExhaustionSnapshot` | Count of snapshots with `is_exhausted=True`. |
+| Spend share on exhausted | `HookExhaustionSnapshot` | Sum of `spend_share` for exhausted archetypes. |
+| Brief recommendation | `CreativeBrief` | Today's `recommended_archetype` + `recommended_format` + `recommended_audience`. |
+| OpenAI spend (30d) | `creative_cost_for_client(client_id)` | Sum of `cost_cents` from `CreativeAnalysis` + `CreativeEmbedding` + `CreativeBrief` over 30 days. |
+
+The "trend" indicator on each tile is heuristic (e.g., spend share on exhausted > 25% → red).
+
+### 2. Daily Brief panel
+
+Reads `GET /api/marketing_resources/creatives/daily-brief/`. Renders headline, recommendation badges, hook concept, rationale + risks (two columns), and the inspirations carousel (clicking a thumbnail opens the Explain drawer).
+
+Three buttons:
+
+- **Regenerate** — `POST /daily-brief/regenerate/`. Polls for completion ~12s later and reloads the panel.
+- **History** — opens a side drawer showing the last 30 briefs (`GET /daily-brief/history/`).
+- **Send to Slack** *(planned, not in v1)* — for now the brief is auto-included in the existing daily Mission Briefing Slack message.
+
+If no published brief exists yet, the panel shows an empty state with a Regenerate prompt.
+
+### 3. Hook Exhaustion chart
+
+Highcharts column chart, one bar per archetype. Bar height is `exhaustion_score` (0..1). Exhausted bars are colored red (`#dc2626`); healthy bars are blue (`#3b82f6`).
+
+Below the chart, a list of per-archetype rows shows:
+
+- Spend share (formatted percent).
+- Net-new ratio.
+- ROAS slope.
+- An `EXHAUSTED` chip if applicable.
+- "Try instead: <alt1>, <alt2>, <alt3>" pulled from `recommended_alternatives`.
+
+Tooltip on hover shows all sub-signals plus the composite score. See [Hook Exhaustion](/mission-control/creative-analytics/hook-exhaustion) for the math.
+
+### 4. Concept Clusters
+
+Highcharts bubble chart over `CreativeConcept`s:
+
+- X axis: `spend_30d` (USD).
+- Y axis: `roas_30d`.
+- Bubble size: `member_count`.
+
+Below the chart, a 3-column grid of concept cards. Each card shows the auto-generated name, summary, member count, 30-day spend, and 30-day ROAS.
+
+A **Recluster now** button calls `POST /concept-clusters/refresh/` for tenants who can't wait until the weekly Monday refresh. Polls completion ~30s later. See [Concept Clusters](/mission-control/creative-analytics/concept-clusters).
+
+### 5. Find creatives by meaning
+
+Free-text search field debounced at 350ms (RxJS `debounceTime` + `distinctUntilChanged`). Hits `POST /api/marketing_resources/creatives/search/` with the current query and the active `kind`.
+
+A toggle button switches between:
+
+- **Concept search** (`kind='analysis_text'`) — find ads that test the same idea.
+- **Visual twins** (`kind='image'`) — find ads that look the same.
+
+Results render as a 6-column thumbnail grid showing match percentage. Click to open Explain.
+
+### 6. Brief history drawer
+
+Lists last 30 briefs ordered by `(date desc, generated_at desc)`. Each row shows the date, headline, and recommendation badges. Clicking a row *(future enhancement)* will load that historical brief into the panel.
+
+### 7. Per-creative Explain drawer
+
+Reads `GET /api/marketing_resources/creatives/<id>/explain/`. The endpoint returns one round-trip with everything the drawer needs:
+
+- Image / video URL.
+- Analysis fields: summary, hooks, themes, on-screen copy, CTA, palette, format notes, frame observations, diagnostics, spoken hook, OCR brand mentions, accessibility flags.
+- Auto + manual tag assignments with confidence + evidence per tag.
+- Archetype benchmark snapshot (latest `HookExhaustionSnapshot` for this creative's archetype).
+- 5 nearest neighbors via cosine kNN over the same `kind`.
+- Whisper transcript for video assets.
+- `cost_cents` — what this analysis cost.
+
+This is the best surface for "why did this ad work / fail?" conversations. The diagnostics block in particular makes Motion's "tells you what to fix" pitch concrete — strengths, weaknesses, and recommended fixes are all there per creative.
+
+## Auth & tenant context
+
+```typescript
+this.subs.push(this.authService.currentUser.subscribe(tokens => {
+    const newClient = (tokens as any)?.user?.client_id || '';
+    if (newClient && newClient !== this.clientId) {
+        this.clientId = newClient;
+        this.loadAll();
+    }
+}));
+```
+
+`client_id` resolves from `AuthenticationService.currentUser`. Every API call includes it. The backend tenant-scopes via `shared.auth.get_accessible_client_ids` so a non-superuser of tenant B never sees tenant A's data even if they manually URL-fiddle.
+
+## Permissions
+
+Two gates control visibility:
+
+1. **Sidebar entry.** The Ad Creative Analytics top-level nav item is shown if `authService.isSuperUser || permissions['creative-reporting']?.view`. Mirrors the existing Creative Library gate.
+2. **Page body.** Uses `validateAccessPermission` which defaults to *allow* for unknown modules — there is no backend permission row for `ad-creative-analytics` yet, so the strict `validateBlockAccessPermission` would have rejected everyone. Switched to the permissive variant in [this fix](/mission-control/agent-surface/permissions).
+
+## Tech stack
+
+- **Framework:** Angular 14 + Angular Material.
+- **Charts:** Highcharts 11 with `highcharts/modules/treemap` (loaded for future tag-distribution treemap).
+- **State:** Component-local with RxJS subjects for debouncing.
+- **HTTP:** `RepositoryService` (env-aware base URL, JWT auth header injected by an interceptor).
+- **Routing:** Lazy-loaded module at `/ad-creative-analytics` with `AuthGuard` only.
+
+## Files
+
+- `l5ui/src/app/components/ad-creative-analytics/ad-creative-analytics.component.{ts,html,css}` — the page.
+- `l5ui/src/app/components/ad-creative-analytics/ad-creative-analytics.module.ts` — module + lazy route.
+- `l5ui/src/app/components/ad-creative-analytics/ad-creative-analytics.service.ts` — typed wrapper over the 7 backend endpoints.
+- `l5ui/src/app/components/sidebar/sidebar-routes.config.ts` — top-level "Ad Creative Analytics" entry.
+- `l5ui/src/app/components/sidebar/sidebar.component.ts` — gate combining super-admin override + creative-reporting permission.
+- `l5ui/src/app/app-routing.module.ts` — lazy route registration.
+
+## API methods used
+
+```typescript
+this.api.getDailyBrief(clientId)
+this.api.regenerateDailyBrief(clientId)
+this.api.getBriefHistory(clientId, limit)
+this.api.getHookExhaustion(clientId)
+this.api.getConceptClusters(clientId)
+this.api.refreshConceptClusters(clientId)
+this.api.searchCreatives(query, limit, kind)
+this.api.similarCreatives(creativeId, limit, kind)
+this.api.explainCreative(creativeId)
+this.api.getCost(clientId, sinceDays)
+```
+
+All defined in `ad-creative-analytics.service.ts`. Each returns an `Observable<T>` over a typed shape.
+
+## What's next on the roadmap
+
+Things wired in v1 but kept basic, with hooks ready for v2:
+
+- **Tag distribution treemap** — module already imported, just needs a section. Would show `CreativeTagAssignment` counts grouped by category.
+- **Top performers table grouped by archetype** — separate from inspirations. Material table with thumbnails + benchmark deltas.
+- **"Send to Slack now" button** on the brief panel — would call `slack_bot.daily_status_digest` with `force=true, target_client_id=current`.
+- **Brief comparison mode** — pick two dates from history, see how the recommendation evolved.
+- **Image-twin auto-find** — when the Explain drawer opens, surface visual twins inline (currently only `analysis_text` similar are shown).

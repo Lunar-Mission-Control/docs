@@ -1,0 +1,192 @@
+---
+title: "Agent Surface Permissions"
+description: "Who can access automations / agent builder / skills / KBs — JWT claims, role gating, and the full backend + frontend gate matrix"
+icon: "lock"
+---
+
+The agent surface is a single permission boundary. Either the user can touch all of it (automations + agent builder + skills + knowledge bases + ops dashboard + run history) or none of it. There's no per-feature mix.
+
+This page documents the gate end-to-end: backend, frontend, and the JWT claims it relies on.
+
+## Who can access it
+
+| Role | role_id | is_superuser | Has access? |
+| --- | --- | --- | --- |
+| super admin | 1 | True | ✅ |
+| account owner | 2 | — | ✅ |
+| Account Owner | 8 | — | ✅ |
+| Super Admin | 9 | — | ✅ |
+| Super Admin Agency | 11 | — | ✅ |
+| Account Owner Agency | 12 | — | ❌ |
+| Administrator Agency | 13 | — | ❌ |
+| Standard Agency | 14 | — | ❌ |
+| administrator | 3 | — | ❌ |
+| standard | 4 | — | ❌ |
+| (any non-superuser, role_id ∉ {1,2,8,9,11}) | — | False | ❌ |
+
+The gate is `is_superuser || role_id ∈ {1, 2, 8, 9, 11}`. Source of truth: `shared/auth.py:agent_surface_allowed`.
+
+## Backend gate
+
+`shared/auth.py:agent_surface_allowed(user) -> bool` is the single source of truth.
+
+```python
+ELEVATED_AGENCY_ROLE_IDS = {1, 2, 8, 9, 11}
+
+def agent_surface_allowed(user) -> bool:
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    role_id = getattr(user, 'role_id', None)
+    return role_id is not None and role_id in ELEVATED_AGENCY_ROLE_IDS
+```
+
+Used by:
+
+- **DRF permission class** `shared.permissions.AgentSurfaceAllowed` — gates every mutation view in `automations`, `custom_agents`, `skills`, and the write paths in `knowledge_base`.
+- **Querset scoping helper** `shared.auth.scope_to_accessible_clients(qs, request)` — returns `qs.none()` for non-allowed users so reads silently return empty rather than 403.
+- **WebSocket consumer** `automations.consumers` — checks at connect time; rejects the upgrade for non-allowed users.
+- **Backend system check** — `python manage.py check` surfaces `agent_surface.W001 / W002` for missing `OPENAI_API_KEY` / `pgvector`.
+
+## Frontend gate
+
+The frontend mirrors the backend gate in two places:
+
+### `AgentSurfaceGuard` (router)
+
+`l5ui/src/app/shared/guards/agent-surface.guard.ts` is wired onto every `/automations/*`, `/skills/*`, `/agent-builder/*`, `/knowledge-bases/*` route via `canActivate: [AuthGuard, AgentSurfaceGuard]`. Non-allowed users get redirected to `/`.
+
+```typescript
+const ELEVATED_AGENCY_ROLE_IDS = [1, 2, 8, 9, 11];
+
+canActivate(): boolean {
+    const userInfo = this.authenticationService.currentUserInfo;
+    const user = userInfo?.user;
+    if (!user) {
+        this.router.navigate(['/login']);
+        return false;
+    }
+    const allowed = !!user.is_superuser
+        || (typeof user.role_id === 'number'
+            && ELEVATED_AGENCY_ROLE_IDS.includes(user.role_id));
+    if (!allowed) {
+        this.router.navigate(['/']);
+        return false;
+    }
+    return true;
+}
+```
+
+### Sidebar filter
+
+`l5ui/src/app/components/sidebar/sidebar.component.ts` filters the "Agents" submenu (Automations / Live Operations / Run History / Agent Builder / Skills / Knowledge Bases) using the same gate — items are stripped before rendering rather than shown-then-403.
+
+```typescript
+if (['automations', 'operations', 'automations-history',
+     'agent-builder', 'skills', 'knowledge-bases'].includes(item.name)) {
+    const u = this.authService.currentUserInfo?.user;
+    if (!u) return false;
+    if (u.is_superuser) return true;
+    return typeof u.role_id === 'number'
+        && [1, 2, 8, 9, 11].includes(u.role_id);
+}
+```
+
+<Warning>
+  Both gates read from `currentUserInfo` (the parsed JWT payload), **not** from `currentUserValue` (the raw login response).
+
+  An earlier bug pointed both gates at `currentUserValue?.user`, but `currentUserValue` is the raw login response — it has `access` / `refresh` / `is_agency` / `client_type` but no `user` property. Reading `tokens.user.is_superuser` always returned `undefined`, locking even super admins out of the agent surface.
+
+  If you find yourself accessing user claims from a route guard, sidebar filter, or component, always go through `currentUserInfo?.user`.
+</Warning>
+
+## JWT claims
+
+The user object inside the JWT (`token.payload['user']`) is built by `useraccount/helpers.py:get_user_details(user)` at login. The claims this gate depends on:
+
+| Claim | Source | Purpose |
+| --- | --- | --- |
+| `is_superuser` | `User.is_superuser` | Django superuser flag. |
+| `role_id` | `User.role_id` | FK to `users.UserRole`. |
+| `client_id` | `User.client_id` | Tenant the user belongs to. |
+| `client_type` | `Client.client_type` | 1=B2C, 2=B2B, 3=AGENCY. |
+| `processCompleted` | `Client.onboarding_complete` | Affects sidebar disabled-flag handling. |
+| `feature_flags` | `FeatureFlag.get_client_flags(client_id)` | Per-client feature flags. |
+
+`agent_surface_allowed` only reads `is_superuser` and `role_id`. If either is missing from the JWT, the user is locked out of the surface — this is the intended fail-closed behavior.
+
+## Tenant scoping vs. surface gate
+
+The agent surface gate decides **whether you can touch the surface at all**. Once you're allowed, every read still tenant-scopes via `shared.auth.get_accessible_client_ids(user, token_client_id)`:
+
+| User type | What they see |
+| --- | --- |
+| Superuser | Every tenant. |
+| Elevated agency role (`role_id ∈ {1,2,8,9,11}`) at agency level | Their agency + every child client. |
+| Elevated agency role at child level | Just that client (+ falls back to `virtual_clients` if no agency record). |
+| Non-elevated | `qs.none()` — surface gate rejects them earlier. |
+
+The tenant scoping is enforced separately on every endpoint — even an authenticated super-admin doesn't see another tenant's data unless they pass `?client_id=<id>` and that id is in their accessible set.
+
+## Common gotchas
+
+<AccordionGroup>
+  <Accordion title="Logged in but the agent surface is gone" icon="circle-question">
+    Most common cause: stale JWT from before a frontend refactor.
+
+    Fix: log out, log back in. The fresh JWT carries the current `is_superuser` + `role_id` claims.
+
+    If still missing after re-login — open DevTools → Application → Local Storage → decode the access token's payload and check `user.is_superuser` and `user.role_id`. If either is missing, the JWT minting logic in `useraccount/helpers.py:get_user_details` is the issue.
+  </Accordion>
+
+  <Accordion title="My role_id is correct but I'm still locked out" icon="circle-question">
+    Verify the role is in `{1, 2, 8, 9, 11}` — not `{3, 4, 5, 6, 7, 10, 12, 13, 14}`. The 11/12/13/14 series are the agency-side counterparts of the 1/2/3/4 base roles, but only `11` (Super Admin Agency) is in the elevated set. Account Owner / Administrator / Standard at the agency level are intentionally excluded — they're operational roles, not super-admin equivalents.
+  </Accordion>
+
+  <Accordion title="Backend allows it but the sidebar still hides it" icon="circle-question">
+    The frontend bundle may be stale. Hard-refresh the browser (`Cmd+Shift+R`) or restart `ng serve`. The sidebar filter is evaluated client-side; if your bundle pre-dates the gate change, the gate behavior will lag.
+  </Accordion>
+
+  <Accordion title="Custom agent missing for an allowed user" icon="circle-question">
+    Custom agent visibility additionally tenant-scopes via `ai_chat/agent_scope.py`. An agent in tenant A is not visible to a super-admin viewing tenant B unless the agent is shared (currently not exposed in the UI — agents are tenant-private by default).
+  </Accordion>
+
+  <Accordion title="Feature flag overrides the gate" icon="circle-question">
+    Per-client feature flags can disable specific agent-surface features even when the gate allows them. For example, a `disable_automations` flag on a client makes `/automations` route to `/` even for super admins of that tenant. Check `currentUserInfo.user.feature_flags`.
+  </Accordion>
+</AccordionGroup>
+
+## Adding a new role to the elevated set
+
+If a new role needs agent-surface access:
+
+<Steps>
+  <Step title="Update the backend constant">
+    `shared/auth.py:ELEVATED_AGENCY_ROLE_IDS` — add the new role id.
+  </Step>
+  <Step title="Update the frontend mirror">
+    `l5ui/src/app/shared/guards/agent-surface.guard.ts:ELEVATED_AGENCY_ROLE_IDS` — add the same id.
+
+    `l5ui/src/app/components/sidebar/sidebar.component.ts` — find the `[1, 2, 8, 9, 11]` literal in the agent-surface filter and add the id.
+  </Step>
+  <Step title="Add to the docs table">
+    The role table at the top of this doc — add the new row.
+  </Step>
+</Steps>
+
+The two literals (backend + frontend) being separate is intentional — the backend is the source of truth, the frontend is a UX optimization to hide what the backend would reject anyway.
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| Backend gate | `shared/auth.py:agent_surface_allowed` |
+| DRF permission class | `shared/permissions.py:AgentSurfaceAllowed` |
+| Queryset scoping | `shared/auth.py:scope_to_accessible_clients` |
+| WebSocket connect-time check | `automations/consumers.py` |
+| JWT user payload | `useraccount/helpers.py:get_user_details` |
+| Frontend route guard | `l5ui/src/app/shared/guards/agent-surface.guard.ts` |
+| Frontend sidebar filter | `l5ui/src/app/components/sidebar/sidebar.component.ts` |
+| Frontend `currentUserInfo` accessor | `l5ui/src/app/shared/services/authentication.service.ts:currentUserInfo` |
+| `is_superuser` getter | `l5ui/src/app/shared/services/authentication.service.ts:isSuperUser` |

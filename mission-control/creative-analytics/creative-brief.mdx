@@ -1,0 +1,230 @@
+---
+title: "Daily Creative Brief"
+description: "Persisted, evidence-backed creative-bet recommendation generated once per day per tenant"
+icon: "lightbulb"
+---
+
+The Daily Creative Brief is Mission Control's answer to "what should I make next?" It is a persisted artifact (`CreativeBrief` row, one per `(client_id, date)`) generated once per day from the full creative-library state, surfaced identically on the Ad Creative Analytics page, in the daily Slack digest, and through Bob's `recommend_next_creative_brief` tool.
+
+<Info>
+  The brief is a *single source of truth* — the same row you see on the page is what Slack posts and what Bob returns. Regenerating from the UI updates all three surfaces atomically.
+</Info>
+
+## What's in a brief
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `headline` | string | One-sentence summary of the creative-health signal. |
+| `hook_concept` | string | 1–2 sentence creative concept to test. The actual brief. |
+| `recommended_archetype` | slug from `hook_type` | The hook archetype to bet on next. |
+| `recommended_format` | slug from `format` | UGC, studio shot, demo, etc. |
+| `recommended_audience` | slug from `audience_signal` | Gen Z, parents, value-conscious, etc. |
+| `recommended_messaging_theme` | slug from `messaging_theme` | Social proof, problem-solution, founder story, etc. |
+| `rationale` | array of strings | 3–5 evidence-backed bullets, each citing a specific data point (an exhausted archetype, a top performer, a benchmark). |
+| `risks` | array of strings | 1–2 risks of pursuing this bet. |
+| `inspirations` | array of `{creative_id, why}` | Top performers from the user's own library that match the recommendation. |
+| `benchmark_snapshot` | JSON | Per-archetype p50/p75 ROAS / CTR at generation time, frozen for traceability. |
+| `cost_cents`, `tokens_in`, `tokens_out`, `model` | metadata | OpenAI cost ledger. |
+| `input_payload_sha` | sha256 | Hash of the LLM input payload — same hash + same `(client_id, date)` cache-hits without re-spending. |
+| `status` | enum | `draft` / `published` / `failed`. The page only renders `published`. |
+
+## Generation
+
+The generator lives at `marketing_resources/services/brief_generator.py` and is called from three places:
+
+1. The hourly Celery cron (`marketing_resources.fanout_daily_briefs`) — fans out per-tenant generation when each tenant's local time matches its configured digest hour.
+2. The `POST /api/marketing_resources/creatives/daily-brief/regenerate/` endpoint — async, returns a Celery task id.
+3. Bob's `recommend_next_creative_brief` tool — synchronous if no brief exists for today, otherwise just fetches.
+
+### Context payload
+
+Before calling the LLM, `build_context_payload(client_id)` assembles a structured JSON snapshot of the tenant's creative library:
+
+```python
+{
+    "client_id": "...",
+    "as_of_date": "2026-05-03",   # date-only — same data → same SHA
+    "allowed_slugs": {
+        "hook_type":       ["problem_solution", "curiosity_gap", ...],
+        "format":          ["ugc", "studio_shot", ...],
+        "audience_signal": ["gen_z", "millennial", ...],
+        "messaging_theme": ["social_proof", "scarcity", ...],
+        # all 8 categories
+    },
+    "perf_30d":  { /* spend, ROAS, p50/p75 by archetype */ },
+    "perf_7d":   { /* same shape, last 7 days for week-over-week */ },
+    "exhaustion": [ /* HookExhaustionSnapshot rows (latest per archetype) */ ],
+    "diversity_30d": { "score": 0.61, "archetype_distribution": {...} },
+    "top_performers_60d": [ /* top 3 ROAS per archetype */ ],
+    "concepts": [ /* CreativeConcept rows with name, summary, spend, ROAS */ ],
+    "tag_distribution_30d": { /* counts by category × tag */ },
+}
+```
+
+Two things to notice:
+
+- **`allowed_slugs`** — the LLM is given the live taxonomy and instructed to draw recommendations from it. Slug coercion runs on the response anyway as a belt-and-suspenders.
+- **`as_of_date`, not `as_of`** — the payload uses date-only granularity so the SHA is stable across same-day re-runs.
+
+### LLM call
+
+GPT-4o is called with a strict JSON schema and `response_format='json_object'`. Temperature is `0.4` — mild creativity, mostly evidence-driven. The system prompt enforces:
+
+- Recommended slugs MUST come from `allowed_slugs`.
+- Rationale bullets MUST cite specific data from the payload.
+- At most 5 rationale, 2 risks, 5 inspirations.
+- Don't recommend an exhausted archetype unless every alternative is also exhausted.
+
+### Persistence + idempotency
+
+```
+generate_brief(client_id, force=False)
+  ├─ build_context_payload(...)
+  ├─ sha = sha256(payload)
+  ├─ If a published CreativeBrief exists for (client_id, today, sha)
+  │     → return it (cache hit, no LLM call)
+  ├─ Call GPT-4o
+  ├─ Coerce invalid slugs against allowed_slugs (LLM occasionally drifts)
+  ├─ Truncate rationale / risks / inspirations to limits
+  ├─ Compute cost_cents from tokens_in/out
+  └─ update_or_create on (client_id, date), status='published'
+```
+
+If the LLM call itself fails, the row is still persisted with `status='failed'` and the headline set to `"Brief generation failed: <reason>"`. The UI shows a retry hint.
+
+## Endpoints
+
+<ParamField path="GET /api/marketing_resources/creatives/daily-brief/" query>
+  Latest published brief for the caller's tenant.
+
+  **Query params:**
+  - `client_id` — optional if the caller has exactly one accessible tenant.
+  - `date` — optional `YYYY-MM-DD`; defaults to most-recent.
+
+  Returns `{ "brief": <CreativeBrief> | null, "message"?: string }`.
+</ParamField>
+
+<ParamField path="POST /api/marketing_resources/creatives/daily-brief/regenerate/" body>
+  Force a regeneration. Body: `{ "client_id": "..." }`. Returns `202 Accepted` with a Celery task id.
+
+  Useful when:
+  - The user wants to regenerate after a fresh creative ingest.
+  - You want to re-run with `force=True` semantics.
+</ParamField>
+
+<ParamField path="GET /api/marketing_resources/creatives/daily-brief/history/" query>
+  Last N briefs for the sidebar history drawer.
+
+  **Query params:**
+  - `client_id` — required (or implicit for single-tenant users).
+  - `limit` — default 30, max 90.
+
+  Returns `{ "briefs": [<CreativeBrief>, ...] }` ordered by `(date desc, generated_at desc)`.
+</ParamField>
+
+All endpoints are tenant-scoped via `shared.auth.get_accessible_client_ids`. A non-superuser of tenant B asking for tenant A's brief gets a 400 — never another tenant's data.
+
+## Bob tool
+
+```python
+@tool
+def recommend_next_creative_brief(
+    config: Annotated[RunnableConfig, InjectedToolArg],
+    client_id: str = '',
+    force_regenerate: bool = False,
+) -> str:
+    """Return today's Creative Brief — the recommended next bet (archetype,
+    format, audience, messaging theme) with hook concept, evidence-backed
+    rationale, risks, and inspirations from the user's top performers."""
+```
+
+The tool is a thin fetch wrapper:
+
+1. If a published brief exists for `(target, today)` → return its serialized form.
+2. Else (or if `force_regenerate=True`) → call `generate_brief(target, force=force_regenerate)` synchronously and return the result.
+
+Because both the UI and Bob read the same row, the user's Bob conversation about today's brief always matches the analytics page.
+
+## Slack delivery
+
+Each morning, the existing `slack_bot.daily_status_digest` job (already running for tenants with `daily_digest_enabled=True`) loads today's CreativeBrief and appends it to the Mission Briefing message:
+
+```
+*:art: Creative Brief — <headline>*
+
+Archetype: `<recommended_archetype>`     Format: `<recommended_format>`
+Audience:  `<recommended_audience>`      Theme:  `<recommended_messaging_theme>`
+
+*Hook concept:* <hook_concept>
+
+*Why:*
+  • <rationale[0]>
+  • <rationale[1]>
+  • <rationale[2]>
+
+[ Open Mission Control ]    [ Creative Analytics ]
+```
+
+The "Creative Analytics" button deep-links to `/ad-creative-analytics`. Tenants without a published brief for today simply omit the block.
+
+## Regeneration & history
+
+The analytics page exposes:
+
+- A **Regenerate** button — `POST /daily-brief/regenerate/`. Briefs typically come back in ~10–15 seconds. The page polls and replaces the rendered card on completion.
+- A **History** button — opens a side drawer reading `GET /daily-brief/history/?limit=30`. Shows previous days' headline + recommendation badges so trends are visible.
+
+Same content surfaces in Bob via natural-language: "Why did yesterday's brief recommend testimonials?" calls `recommend_next_creative_brief` with `client_id` plus a follow-up `daily_brief?date=...` query under the hood.
+
+## Slug coercion
+
+LLMs occasionally drift outside the allowed slug set. The generator runs a defensive coercion step:
+
+```python
+def _coerce_slug(slug: str, allowed: List[str]) -> str:
+    s = (slug or '').strip().lower()
+    if s in allowed:
+        return s
+    if not allowed:
+        return ''
+    # Approximate: pick the first allowed slug that contains the model's hint
+    for a in allowed:
+        if s and (a.startswith(s) or s in a):
+            return a
+    return allowed[0]   # safe fallback so we never persist an invalid slug
+```
+
+This ensures `recommended_archetype` is always a valid `hook_type` slug — the analytics page badges never link to ghost archetypes.
+
+## Cost & rate limiting
+
+A typical brief uses ~2400 prompt tokens + ~180 completion tokens at GPT-4o rates → about **$0.025 per generation**. Tenants generate once per day → ~$0.75/month per tenant.
+
+Same-day re-runs against unchanged data cost **$0** — the input-payload SHA cache hits before the LLM call. The page's Regenerate button is therefore safe to spam; it only re-spends when the underlying creative library has actually changed.
+
+## Testing locally
+
+```bash
+# Seed dummy data so the brief context isn't empty:
+python manage.py seed_creative_test_data \
+  --client-id test-creative-1 --count 30 --reset --analyze
+
+# Wait for the Celery worker to finish vision/embed, then:
+python manage.py run_creative_pipeline --client-id test-creative-1
+
+# The brief is materialized when the command exits. Confirm:
+python manage.py creative_pipeline_status --client-id test-creative-1
+```
+
+Or directly from a Django shell:
+
+```python
+from marketing_resources.services.brief_generator import generate_brief
+b = generate_brief('test-creative-1', force=True)
+print(b.headline)
+print(b.recommended_archetype, b.recommended_format)
+for r in b.rationale:
+    print(' -', r)
+```
+
+See the [Operations](/mission-control/creative-analytics/operations) doc for production backfill instructions.

@@ -1,0 +1,184 @@
+---
+title: "Taxonomy & Tagging"
+description: "8 system categories, ~70 system tags, per-category confidence floors, and the auto-tag promotion rules"
+icon: "tags"
+---
+
+The creative-tag taxonomy is the structured vocabulary GPT-4o uses to describe every ingested creative. It's deliberately closed (the model can't invent slugs) and Motion-aligned (8 categories, mirroring the categories Motion's industry research identified as the highest-leverage axes for performance creative).
+
+## The 8 categories
+
+Each category is seeded as a `CreativeTagCategory` with `is_system=True` and a per-category `confidence_floor` tuned for precision vs. recall.
+
+| Category | Slug | Floor | What it captures |
+| --- | --- | --- | --- |
+| Hook Type | `hook_type` | 0.75 | How the creative grabs attention in the first 3 seconds. |
+| Format | `format` | 0.70 | Production format / shooting style (UGC, studio, animation, etc). |
+| Visual Style | `visual_style` | 0.55 | Color, typography, density, treatment. |
+| Pace | `pace` | 0.55 | Cut frequency / rhythm (slow burn, fast cut, static). |
+| Emotional Tone | `emotion` | 0.50 | Primary emotional register (aspirational, humorous, urgent...). |
+| CTA Style | `cta_style` | 0.70 | Type of call-to-action used. |
+| Audience Signal | `audience_signal` | 0.50 | Cues about the intended audience. |
+| Messaging Theme | `messaging_theme` | 0.65 | Persuasive narrative (problem-solution, social proof, scarcity, ...). |
+
+<Info>
+  `messaging_theme` was added in v2 — it's the 8th category that aligned the taxonomy with Motion's documented set. Display names are prefixed with "Theme:" so they don't collide with the `hook_type` taxonomy under the `(lower(name), client_id)` unique constraint (both have a `problem_solution` slug).
+</Info>
+
+## Why per-category floors
+
+Different categories deserve different confidence thresholds:
+
+- **Precision-critical** (`hook_type`, `cta_style`, `format`) — wrong tags here directly poison downstream signals like exhaustion. High floor (0.7+) means we'd rather miss a tag than misattribute one.
+- **Inherently fuzzy** (`emotion`, `audience_signal`, `pace`, `visual_style`) — the model's confidence on these will rarely exceed 0.6 even when correct. Lower floors (0.5–0.55) keep recall reasonable.
+- **Middle ground** (`messaging_theme`) — narrative themes are objectively identifiable but the model can drift. 0.65 splits the difference.
+
+Floors are stored on the `CreativeTagCategory.confidence_floor` field and applied at auto-tag promotion time. Override them via a data migration if your team wants to tune them — they're just floats on a row.
+
+## System tag inventory
+
+Each category seeds a fixed set of tags. The vision prompt is given the live taxonomy at call time, so as you add tags via migration the model picks them up immediately on the next run.
+
+<AccordionGroup>
+  <Accordion title="Hook Type (13 tags)" icon="hand-pointer">
+    `problem_solution`, `curiosity_gap`, `shock_value`, `testimonial`, `demonstration`, `before_after`, `statistic`, `question`, `story`, `list_promise`, `objection_handle`, `urgency`, `celebrity_endorsement`
+  </Accordion>
+  <Accordion title="Format (11 tags)" icon="film">
+    `ugc`, `studio_shot`, `product_only`, `lifestyle`, `animation`, `screenshot_demo`, `text_only`, `split_screen`, `stop_motion`, `live_action_review`, `dialog_skit`
+  </Accordion>
+  <Accordion title="Visual Style (8 tags)" icon="palette">
+    `minimalist`, `bold_color`, `typographic`, `high_contrast`, `muted_pastel`, `brand_aligned`, `maximalist`, `vintage_filter`
+  </Accordion>
+  <Accordion title="Pace (4 tags)" icon="gauge">
+    `slow_burn`, `fast_cut`, `medium`, `static_image`
+  </Accordion>
+  <Accordion title="Emotional Tone (8 tags)" icon="face-smile">
+    `aspirational`, `humorous`, `urgent`, `relatable`, `educational`, `confident`, `calm`, `hype`
+  </Accordion>
+  <Accordion title="CTA Style (6 tags)" icon="hand">
+    `shop_now`, `learn_more`, `subscribe`, `discount`, `implicit`, `none`
+  </Accordion>
+  <Accordion title="Audience Signal (7 tags)" icon="users">
+    `gen_z`, `millennial`, `parents`, `gen_x`, `fitness`, `luxury`, `value_conscious`
+  </Accordion>
+  <Accordion title="Messaging Theme (8 tags)" icon="message-quote">
+    `problem_solution`, `social_proof`, `scarcity`, `lifestyle_aspiration`, `education`, `founder_story`, `comparison`, `transformation`
+  </Accordion>
+</AccordionGroup>
+
+## Vision prompt — taxonomy injection
+
+Right before the GPT-4o call, the live taxonomy is rendered into the prompt:
+
+```
+Allowed taxonomy (use exactly these slugs):
+  hook_type: before_after, celebrity_endorsement, curiosity_gap, demonstration, ...
+  format: animation, dialog_skit, lifestyle, live_action_review, ...
+  visual_style: bold_color, brand_aligned, high_contrast, ...
+  pace: fast_cut, medium, slow_burn, static_image
+  emotion: aspirational, calm, confident, ...
+  cta_style: discount, implicit, learn_more, none, shop_now, subscribe
+  audience_signal: fitness, gen_x, gen_z, luxury, ...
+  messaging_theme: comparison, education, founder_story, ...
+```
+
+The model is told `Unknown values will be silently dropped` so it stays inside the lines. The `_apply_auto_tags` function double-enforces this by resolving every emitted `(category, slug)` pair against the live `CreativeTag` rows and dropping unresolved pairs.
+
+## How auto-tags get promoted
+
+The vision response includes:
+
+```json
+{
+  "auto_tags": [
+    {"category": "hook_type", "slug": "testimonial",
+     "confidence": 0.88, "evidence": "voiceover: 'this changed my routine'"},
+    {"category": "format", "slug": "ugc",
+     "confidence": 0.92, "evidence": "hand-held vertical, no studio polish"},
+    {"category": "emotion", "slug": "relatable",
+     "confidence": 0.55, "evidence": "casual tone, kitchen setting"},
+    ...
+  ]
+}
+```
+
+`_apply_auto_tags(creative_id, client_id, analysis)` walks each entry:
+
+1. **Skip if `confidence < per-category floor`.** A `hook_type` tag at 0.7 is dropped (floor 0.75); the same `emotion` tag at 0.55 is kept (floor 0.5).
+2. **Skip if the `(category, slug)` pair isn't a system tag.** No invented slugs.
+3. **Skip if `client_id` is empty.** Auto-tag rows without a tenant would collide in the unique constraint.
+4. **Upsert via `_upsert_assignment`:**
+   - If no row exists for `(tag, creative_id)` → create with `source='auto'`.
+   - If a row exists with `source='manual'` → leave it alone. *Manual tags are never overwritten.*
+   - If a row exists with `source='auto'` → refresh confidence + evidence so re-analyses pick up improvements.
+5. **`IntegrityError` is caught** — concurrent re-fires from the sweep + the post_save signal hitting the same creative would otherwise race; the catch path falls through to the refresh branch.
+
+## What v2 explicitly removed
+
+The v1 implementation force-promoted `hook_archetype_primary` at confidence `0.99` regardless of the model's actual belief. That made auto-tagged hook archetypes indistinguishable from manual confidence and over-weighted any wrong call. v2 drops the special case — the model promotes `hook_archetype_primary` via `auto_tags[]` at its honest confidence like every other tag, or it doesn't promote (the slug stays on the analysis JSON for queries either way).
+
+## Custom tags per tenant
+
+System tags share `client_id='__system__'`. Tenants can add their own custom tags via:
+
+- The frontend Creative Library's tag editor (calls `POST /api/marketing_resources/creative_tags/`).
+- A bulk-assign endpoint at `POST /api/marketing_resources/creative_tags/bulk_assign/`.
+
+Custom tags don't have a category by default (`category=None`), don't appear in the vision prompt, and aren't auto-applied. They're purely for the human-curated dimension. The `creative-taxonomy/` endpoint returns *only* system tags so the vision-prompt injection doesn't include arbitrary tenant-custom slugs the LLM has no signal for.
+
+## Endpoints
+
+<ParamField path="GET /api/marketing_resources/creative-taxonomy/">
+  Returns `{ categories: [{ slug, name, confidence_floor, tags: [{ slug, name, color, icon }] }] }` for all `is_system=True` rows. Used by the frontend tag picker and Bob's "show me the taxonomy" tool.
+</ParamField>
+
+<ParamField path="POST /api/marketing_resources/creative_tags/" body>
+  Per-tenant custom tag CRUD. Body: `{ name, color?, icon?, category? }`. Auth: tenant-scoped.
+</ParamField>
+
+<ParamField path="POST /api/marketing_resources/creatives/<id>/tags/" body>
+  Manually attach a tag to a creative. The `source='manual'` row is created, and the auto-tagger will never overwrite it.
+</ParamField>
+
+## Extending the taxonomy
+
+To add a new category or new system tags, write a Django data migration. Pattern (mirrors `0010_creative_taxonomy_seed.py`):
+
+```python
+from django.db import migrations
+
+NEW_TAGS = [
+    ('founder_voiceover', 'Founder Voiceover', '#10b981', 'mic'),
+    ('skit_series',       'Skit Series',       '#f59e0b', 'theater_comedy'),
+]
+
+def seed(apps, schema_editor):
+    Category = apps.get_model('marketing_resources', 'CreativeTagCategory')
+    Tag = apps.get_model('marketing_resources', 'CreativeTag')
+
+    fmt = Category.objects.get(slug='format', is_system=True)
+    for slug, name, color, icon in NEW_TAGS:
+        Tag.objects.update_or_create(
+            slug=slug, category=fmt, is_system=True,
+            defaults={'name': name, 'color': color, 'icon': icon,
+                      'client_id': '__system__'},
+        )
+
+class Migration(migrations.Migration):
+    dependencies = [('marketing_resources', '0013_messaging_theme_seed')]
+    operations = [migrations.RunPython(seed, migrations.RunPython.noop)]
+```
+
+Two notes:
+
+- **Display names must be unique within `client_id='__system__'`** (the constraint is `(lower(name), client_id)`). If the new tag's display name collides with an existing one, prefix it (e.g. `"Theme: Problem → Solution"` vs `"Problem → Solution"`).
+- **Once seeded, the vision prompt picks up the new slug on the next call** — no code change needed. The auto-tagger will start emitting it as soon as the model believes a creative matches.
+
+## Where the code lives
+
+- `marketing_resources/models/creative_tag.py` — `CreativeTagCategory`, `CreativeTag`, `CreativeTagAssignment`.
+- `marketing_resources/migrations/0010_creative_taxonomy_seed.py` — original 7-category seed.
+- `marketing_resources/migrations/0013_messaging_theme_seed.py` — adds `messaging_theme` + per-category floors.
+- `knowledge_base/creative_analysis.py:_allowed_taxonomy_block` — vision prompt injection.
+- `knowledge_base/creative_analysis.py:_apply_auto_tags` — promotion + floor enforcement.
+- `marketing_resources/views/creative_taxonomy.py` — the read endpoint.
