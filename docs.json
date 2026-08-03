@@ -36,7 +36,8 @@
               }
             ]
           }
-        ]
+        ],
+        "icon": "award-simple"
       },
       {
         "tab": "Technical Guides",
