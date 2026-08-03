@@ -1,0 +1,82 @@
+---
+title: "How to Create a Goal Metric"
+---
+
+[How to Create a Goal Metric](https://www.loom.com/share/abce3ab05d8a4c7f9245e9c8e9ac26c8)
+
+<iframe src="https://www.loom.com/embed/abce3ab05d8a4c7f9245e9c8e9ac26c8" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Overview**
+
+Goals in SuperOrbital are a specialized type of custom metric that allow you to manually define target values for the KPIs that matter most to your business. Unlike platform metrics, goals are user-defined and are designed to help you track actual performance against planned objectives.
+
+The primary benefit of creating goals is that they can be tied directly to any standard platform metric or custom metric available in SuperOrbital. Once created, goals can be added to **Performance Reports** to compare actual performance against targets, or used within **Outliers** to trigger automated Slack notifications when performance falls above or below a defined threshold.
+
+Common use cases include tracking advertising budgets, revenue targets, CPA goals, MER goals, and other business-specific KPIs.
+
+## **Step 1: Create a New Goal Metric**
+
+Although goals are managed from the **Manage Goals** section, you'll first create the goal itself as a custom metric.
+
+1. From the left navigation menu, expand **Performance Reports**.
+2. Select **Custom Metrics**.
+3. Click **\+ Create New Metric**.
+4. Enter a **Title** and **Description** for your goal metric.
+
+**Tip:** Name your goal based on the target you're tracking, not the underlying platform metric. For example, use **Meta Budget** instead of **Meta Ad Spend**.
+
+<iframe src="https://www.loom.com/embed/9553b82407034690a52a154db584ebb4" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Step 2: Configure the Goal Metric**
+
+1. Select the appropriate **Data Source Category**.
+   - **Commerce** for Shopify goals.
+   - **Media** for advertising platform goals such as Meta, Google Ads, or TikTok.
+2. Select the specific **Data Source** your goal is associated with.
+3. Set **Entry Type** to **Custom User Metric**.
+
+**Note:** Unlike other custom metrics, goals use **Custom User Metric** instead of **Formula**.
+
+4. Select the appropriate **Metric Type** (Currency, Percentage, Number, etc.).
+5. Choose a **Footer Expression**.
+
+The Footer Expression determines how the goal is summarized within Performance Reports.
+
+- Select **Sum** for value-based metrics such as Revenue, Spend, Purchases, or Budgets.
+- Select **Weighted Average** for calculated metrics such as CPA, nCAC, MER, or other ratio-based metrics.
+
+<iframe src="https://www.loom.com/embed/f669e56e582047d0b33222780e2cbd18" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Step 3: Tie the Goal to a Metric**
+
+Under **Ties Back to Metric**, select the metric your goal should be compared against.
+
+You can tie a goal to:
+
+- Any standard platform metric available in SuperOrbital.
+- Any custom filtered metric you've previously created.
+- Any custom calculated metric you've previously created.
+
+Custom calculated metrics appear at the top of the metric list.
+
+Custom filtered metrics appear under the section that corresponds to the dimension they were filtered by. For example, a custom filtered metric for Meta Ad Spend filtered by **Campaign Name** will appear within the **Campaign** section.
+
+Standard platform metrics are organized under the **Account** section.
+
+Select the metric you want your goal to track against.
+
+<iframe src="https://www.loom.com/embed/7f5157813e9c4f3ab145e81e3de62bee" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Step 4: Enable Variance Tracking**
+
+Before saving your goal, scroll to the bottom of the page and enable **Show Variance %**.
+
+Enabling this option allows Performance Reports to display:
+
+- Goal value
+- Actual value
+- Percentage variance between the two
+
+This makes it easy to monitor pacing toward your client's goals directly within custom Performance Reports.
+
+Click **Save** to create your goal metric.
