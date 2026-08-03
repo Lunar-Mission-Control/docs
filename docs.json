@@ -20,7 +20,26 @@
     },
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "User Guides",
+        "groups": [
+          {
+            "group": "Performance Reports",
+            "pages": [
+              {
+                "group": "Custom Metrics",
+                "pages": [
+                  "untitled-page",
+                  "untitled-page-2",
+                  "untitled-page-3",
+                  "untitled-page-4"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Guides",
         "groups": [
           {
             "group": "Getting Started",

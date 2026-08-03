@@ -1,0 +1,67 @@
+---
+title: "How to Create Filtered Metrics"
+---
+
+[Full How-To Video: How to Create Filtered Metrics - Watch Video](https://www.loom.com/share/49d57baf94d54f769781e944b86ec665)
+
+<div style="position: relative; padding-bottom: 50.26123301985371%; height: 0;">
+  <iframe src="https://www.loom.com/embed/49d57baf94d54f769781e944b86ec665" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" />
+</div>
+
+<iframe src="https://www.loom.com/embed/49d57baf94d54f769781e944b86ec665" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Overview**
+
+Filtered metrics allow you to isolate a platform metric using one or more filter conditions. For example, you can create a metric that reports only Meta Ad Spend for Prospecting campaigns or Shopify Orders for a specific product category.
+
+This article walks through how to create a filtered metric from a single data source.
+
+## **Create a Filtered Metric from a Single Data Source**
+
+To create a filtered metric, you'll first define the data source and filter criteria, then use the Formula Builder to specify the metric you want to return.
+
+<br />**Step 1: Create a New Custom Metric**
+
+1. From the left navigation menu, go to **Performance Reports**.
+2. Expand the submenu and select **Custom Metrics**.
+3. Click **\+ Create New Metric** in the upper-right corner.
+4. Enter a **Title** and **Description** for your custom metric.
+
+<iframe src="https://www.loom.com/embed/5deddb16aa154f5cb82d05aa9cdb6f02" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+**Step 2: Configure the Metric**
+
+1. Select the appropriate **Data Source Category**.
+   - **Commerce** for Shopify metrics.
+   - **Media** for advertising platforms such as Meta, Google Ads, or TikTok.
+   - Select the category that contains the data source you want to filter.
+2. Choose the specific **Data Source** you want to use.
+3. Set the **Entry Type** to **Formula**.
+4. Select the appropriate **Metric Type** (Currency, Percentage, Number, etc.).
+
+<iframe src="https://www.loom.com/embed/d6db7fd3c4b449daa6b6aea48694ceb4" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+**Step 3: Define Your Filter**
+
+1. Select the **Dimension** you want to filter by.
+   - For example, to filter Shopify Sales by Sales Channel, select **Orders** as the dimension.
+2. Once you've selected a dimension, the **Filter Criteria** section will appear.
+3. Choose the attribute you want to filter.
+   - For example, **Sales Channel**.
+4. Select an operator such as **Contains**, **Does Not Contain**, **Equals**, or another available option.
+5. Enter the value you want to filter by.
+
+**Tip:** You can build more advanced logic by adding multiple filter groups and combining them with **AND** and **OR** conditions.
+
+<iframe src="https://www.loom.com/embed/be8e44e0bac843c3a2937a4498352b45" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+**Step 4: Build the Formula**
+
+After your filter criteria have been configured, use the **Formula Builder** to define the metric.
+
+1. In the Formula Builder, select the platform metric you want to return.
+   - For example, if you're filtering Shopify Total Sales by Sales Channel, select **Total Sales.**
+2. Review the formula preview to confirm it matches your intended logic.
+3. Click **Save** in the bottom-right corner to create your custom metric.
+
+<iframe src="https://www.loom.com/embed/37751c14359847e68199e05dc9197d5a" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />

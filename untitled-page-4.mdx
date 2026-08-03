@@ -1,0 +1,52 @@
+---
+title: "How to Create a Calculated Metric Using Filtered Metrics"
+---
+
+[Full How-To Video: How to Create Calculated Metrics Using Filtered Metrics - Watch Video](https://www.loom.com/share/3440f3619b044a9591a3a16d570d5fd6)
+
+<iframe src="https://www.loom.com/embed/3440f3619b044a9591a3a16d570d5fd6" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Overview**
+
+Calculated metrics can also be built using one or more custom filtered metrics. This allows you to create advanced KPIs using filtered subsets of your data across multiple platforms.
+
+Before creating a calculated metric using filtered metrics, you'll first need to create each of the filtered metrics you plan to use in your formula. If you haven't already done so, follow **<u>How to Create a Filtered Metric</u>** before continuing with this guide.
+
+This workflow is commonly used to create holistic blended KPIs, such as **MER**, **nCAC**, or other custom metrics that require excluding specific data from Shopify. For example, you may want to exclude Wholesale, TikTok Shop, or Point of Sale orders before using Shopify Revenue in your calculation. In these cases, you'll first create the necessary filtered Shopify metrics, then reference those metrics when building your calculated metric.
+
+**Step 1: Create a New Custom Metric**
+
+1. From the left navigation menu, go to **Performance Reports**.
+2. Expand the submenu and select **Custom Metrics**.
+3. Click **\+ Create New Metric** in the upper-right corner.
+4. Enter a **Title** and **Description** for your custom metric.
+
+<iframe src="https://www.loom.com/embed/37d4e773b4df4f1ebe22805d3a429cba" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+**Step 2: Configure the Metric**
+
+1. Select the appropriate **Data Source Categories** for your calculation.
+   - **Commerce** for Shopify metrics.
+   - **Media** for advertising platforms such as Meta, Google Ads, TikTok, and others.
+   - Select all categories that contain the data sources you'll use in your calculation, including the data sources used to create your existing filtered metrics.
+2. Choose the specific **Data Sources** you want to include.
+3. Set the **Entry Type** to **Formula**.
+4. Select the appropriate **Metric Type** (Currency, Percentage, Number, etc.).
+
+<iframe src="https://www.loom.com/embed/5c5762f608ba4fc3b2701e90881f619c" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
+
+## **Step 3: Build Your Formula**
+
+Once you've configured your data sources, you'll have access to all supported platform metrics as well as any custom filtered metrics you've previously created.
+
+1. In the **Formula Builder**, locate and select the custom filtered metrics you want to include in your calculation.
+2. Combine your filtered metrics with additional platform metrics using the available mathematical operators (**\+**, **−**, **×**, **÷**) and parentheses.
+
+**Tip:** Be sure to follow the correct order of operations when building your formula. Use parentheses where needed to ensure your calculation is evaluated as intended.
+
+For example, if you're creating a custom **MER** metric that excludes Point of Sale orders, you would select the filtered Shopify metric you previously created (such as **Total Sales Excl. POS**) instead of the standard **Total Sales** metric.
+
+3. Review your formula to confirm it returns the desired calculation.
+4. Click **Save** in the bottom-right corner to create your custom metric.
+
+<iframe src="https://www.loom.com/embed/6363e8b29dc745ae89993eb892afb1e8" title="Loom video player" frameborder="0" className="w-full aspect-video rounded-xl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen />
