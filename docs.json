@@ -25,7 +25,8 @@
           {
             "group": "Summary Dashboards",
             "pages": [
-              "Summary-Dashboards-Overview"
+              "Summary-Dashboards-Overview",
+              "Executive-Summary-Dashboard"
             ]
           },
           {
