@@ -23,13 +23,26 @@
         "tab": "User Guides",
         "groups": [
           {
+            "group": "Summary Dashboards",
+            "pages": [
+              "untitled-page-8"
+            ]
+          },
+          {
+            "group": "Creative Reporting",
+            "pages": [
+              "untitled-page-7"
+            ]
+          },
+          {
             "group": "Performance Reports",
             "pages": [
               {
                 "group": "Custom Report Tables",
                 "pages": [
                   "untitled-page-2",
-                  "How-to-Create-a-Multi-Channel-Tracker"
+                  "How-to-Create-a-Multi-Channel-Tracker",
+                  "untitled-page-11"
                 ]
               },
               {
@@ -49,6 +62,18 @@
                   "untitled-page"
                 ]
               }
+            ]
+          },
+          {
+            "group": "Marketing Attribution (MTA)",
+            "pages": [
+              "untitled-page-9"
+            ]
+          },
+          {
+            "group": "Outlier Management",
+            "pages": [
+              "untitled-page-10"
             ]
           }
         ],
