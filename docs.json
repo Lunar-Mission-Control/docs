@@ -34,7 +34,7 @@
           {
             "group": "Creative Reporting",
             "pages": [
-              "untitled-page-7"
+              "Creative-Reporting-Overview"
             ]
           },
           {
@@ -54,16 +54,16 @@
                 "pages": [
                   "custom-metrics-overview",
                   "how-to-create-filtered-metrics",
-                  "untitled-page-3",
-                  "untitled-page-4"
+                  "How-to-Create-a-Calculated-Metric",
+                  "How-to-Create-a-Calculated-Metric-Using-Filtered-Metrics"
                 ]
               },
               {
                 "group": "Manage Goals",
                 "pages": [
-                  "untitled-page-5",
+                  "Manage-Goals-Overview",
                   "How-to-Create-a-Goal-Metric",
-                  "untitled-page"
+                  "How-to-Update-Manage-Goal-Metrics"
                 ]
               }
             ]
@@ -71,13 +71,13 @@
           {
             "group": "Marketing Attribution (MTA)",
             "pages": [
-              "untitled-page-9"
+              "Marketing-Attribution-Overview"
             ]
           },
           {
             "group": "Outlier Management",
             "pages": [
-              "untitled-page-10"
+              "Outliers-Overview"
             ]
           }
         ],
