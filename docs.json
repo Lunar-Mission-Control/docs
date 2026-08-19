@@ -26,6 +26,13 @@
             "group": "Performance Reports",
             "pages": [
               {
+                "group": "Custom Report Tables",
+                "pages": [
+                  "untitled-page-2",
+                  "untitled-page-7"
+                ]
+              },
+              {
                 "group": "Custom Metrics",
                 "pages": [
                   "custom-metrics-overview",
