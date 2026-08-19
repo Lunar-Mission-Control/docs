@@ -42,6 +42,7 @@
                 "pages": [
                   "Performance-Reports-Overview",
                   "How-to-Create-a-Multi-Channel-Tracker",
+                  "untitled-page-2",
                   "How-to-Integrate-Custom-Google-Sheets"
                 ]
               },
@@ -58,7 +59,7 @@
                 "group": "Manage Goals",
                 "pages": [
                   "untitled-page-5",
-                  "untitled-page-6",
+                  "How-to-Create-a-Goal-Metric",
                   "untitled-page"
                 ]
               }
