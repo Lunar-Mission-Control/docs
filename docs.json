@@ -26,7 +26,8 @@
             "group": "Summary Dashboards",
             "pages": [
               "Summary-Dashboards-Overview",
-              "Executive-Summary-Dashboard"
+              "Executive-Summary-Dashboard",
+              "How-to-Configure-Custom-Scorecards"
             ]
           },
           {
