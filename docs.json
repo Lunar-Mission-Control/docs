@@ -20,7 +20,7 @@
     },
     "tabs": [
       {
-        "tab": "User Guides",
+        "tab": "Client Dashboard Guides",
         "groups": [
           {
             "group": "Summary Dashboards",
@@ -78,6 +78,9 @@
           }
         ],
         "icon": "award-simple"
+      },
+      {
+        "tab": "Agency Dashboard Guides"
       },
       {
         "tab": "Technical Guides",
