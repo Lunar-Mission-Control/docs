@@ -1,0 +1,98 @@
+---
+title: "How to Integrate Custom Google Sheets"
+---
+
+## Overview
+
+There may be cases where SuperOrbital does not yet have a direct integration with a media platform, CRM, MTA tool, or another data source your client uses.
+
+In these cases, you can use a **Google Sheet as a custom data source**. The Google Sheet can be:
+
+- Automatically updated through a third-party data integration tool, such as [Funnel.io](http://Funnel.io).
+- Manually maintained by the Lunar team or the client.
+
+Once connected, the data from your Google Sheet becomes available within SuperOrbital. You can use your custom Google Sheet metrics in **Performance Reports, Custom Dashboards, Custom Metrics, and Executive Summary Dashboard scorecards**, allowing you to incorporate additional data sources into your reporting alongside SuperOrbital's native integrations.
+
+## Step 1: Set Up Your Google Sheet
+
+Before connecting your Google Sheet, make sure the data is structured correctly for SuperOrbital.
+
+Your Google Sheet should:
+
+- Break data out by **day**.
+- Include a **Date** column, with each date represented by a separate row.
+- Include each metric you want to import as its own column.
+- Include a clear column header for each metric or dimension.
+
+For example, a simple Google Sheet might contain columns for **Date, Spend, Impressions, Clicks, and Revenue**, with one row of data for each day.
+
+## Step 2: Connect Your Google Sheet
+
+1. From the left navigation menu, go to **Administration**.
+2. Select **Google Sheets**.
+3. Click **Connect Source**.
+
+A pop-up will appear and guide you through the connection process.
+
+### Share Your Google Sheet
+
+Before SuperOrbital can access the data, the Google Sheet must be shared with the email address provided in the connection window.
+
+1. Open your Google Sheet and click **Share** in the upper-right corner.
+2. Paste the provided email address into the **Add people** field.
+3. Set access to **Viewer** or higher.
+4. Click **Send**.
+
+Once the Sheet has been shared, copy its URL and paste it into the **Google Sheet URL** field in SuperOrbital.
+
+Click **Next**.
+
+## Step 3: Select Your Worksheet
+
+Select the worksheet tab containing the data you want to import into SuperOrbital, then click **Next**.
+
+> **Note:** Each Google Sheet data source can connect to one worksheet tab. If you need to import multiple tabs from the same Google Sheet, create a separate Google Sheet data source for each tab.
+
+## Step 4: Name Your Data Source
+
+Enter a name for your new data source.
+
+This is the name that will appear under **Data Sources** when you're creating Performance Reports, Custom Metrics, and other reporting assets, so choose a name that makes the source easy to identify.
+
+Click **Connect & Detect Columns**.
+
+## Step 5: Configure Your Fields and Metrics
+
+SuperOrbital will analyze the selected worksheet and automatically detect your columns and data types.
+
+Column headers from your Google Sheet will automatically be used as the names of your metrics and dimensions. Before publishing the data source, you can review and edit these names within SuperOrbital.
+
+SuperOrbital will also identify whether each column contains:
+
+- **Dates**
+- **Text/Dimensions**
+- **Metrics**
+
+For metric fields, SuperOrbital will automatically detect the appropriate metric type, such as **Number** or **Currency**.
+
+Review each field to make sure it has been classified correctly. If necessary, you can override the automatically detected field or metric type.
+
+Once you've finished configuring your date field, dimensions, and metrics, click **Save & Publish**.
+
+## Step 6: Confirm Your Data Has Synced
+
+Your new data source will now appear on the **Google Sheets** integration page.
+
+It may take a few minutes for SuperOrbital to complete the initial data sync. Once you see a **green check mark** and the status displays **Synced**, your Google Sheet data is ready to use throughout SuperOrbital.
+
+## Keeping Your Google Sheet Data Up to Date
+
+Google Sheet data is automatically synced with SuperOrbital once per day.
+
+If you add or update data in the Google Sheet and want those changes reflected sooner, you can manually trigger a sync:
+
+1. Navigate to **Administration \> Google Sheets**.
+2. Locate the Google Sheet data source you want to refresh.
+3. Click the **Sync Now** icon for that source.
+
+Once the sync is complete and the status displays **Synced**, your updated data will be available for use in **Performance Reports, Custom Metrics, Custom Dashboards, and Executive Summary Dashboard scorecards**.
