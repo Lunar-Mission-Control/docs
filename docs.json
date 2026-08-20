@@ -91,7 +91,9 @@
             "group": "Marketing Attribution (MTA)",
             "expanded": true,
             "pages": [
-              "Marketing-Attribution-Overview"
+              "Marketing-Attribution-Overview",
+              "How-to-Use-Attribution-Analytics-Report",
+              "layerfive/shopify-custom-pixel-2"
             ]
           }
         ],
