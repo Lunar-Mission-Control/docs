@@ -81,7 +81,8 @@
           {
             "group": "Outlier Management",
             "pages": [
-              "Outliers-Overview"
+              "Outliers-Overview",
+              "How-to-Create-an-Outlier"
             ],
             "expanded": true
           },

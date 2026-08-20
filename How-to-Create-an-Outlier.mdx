@@ -1,0 +1,202 @@
+---
+title: "How to Create an Outlier"
+---
+
+## Overview
+
+**Outlier Management** is SuperOrbital's anomaly detection and notification tool. Outliers allow you to automatically monitor important performance metrics and identify unusual changes without manually checking reporting every day.
+
+You can monitor standard platform metrics or Custom Metrics and define what SuperOrbital should consider an anomaly. When an Outlier is detected, SuperOrbital can automatically create a Task and optionally send Slack notifications based on the severity of the change.
+
+Outliers can be used to monitor metrics such as **Ad Spend, Revenue, CPA, MER, ROAS**, and other client-specific KPIs. You can compare performance against either a **prior period** or an existing **Forecast/Goal Metric**.
+
+---
+
+## Step 1: Create an Outlier Definition
+
+1. From the left navigation menu, go to **Administration**.
+2. Select **Outlier Management**.
+3. Click **Create Outlier Definition**.
+4. Enter a **Title** and **Description**.
+
+> **Tip:** Include the **Data Source, Metric, and Comparison Method** in your Outlier title. As you create more Outliers, descriptive titles will make them much easier to find and manage.
+>
+> For example: **Meta | Ad Spend | Day over Day**
+
+---
+
+## Step 2: Select the Metric You Want to Monitor
+
+Select the **Category** and **Data Source** associated with the metric you want to monitor.
+
+Next, select your **Metric**.
+
+You can monitor:
+
+- Standard platform metrics
+- Custom Filtered Metrics
+- Custom Calculated Metrics
+
+If you want to monitor a Custom Metric, make sure the metric has already been created in SuperOrbital before configuring your Outlier.
+
+---
+
+## Step 3: Choose Your Observation Period
+
+The **Observation Period** determines the timeframe SuperOrbital will analyze when looking for an anomaly.
+
+Available Observation Periods include:
+
+- **Prior Day**
+- **7-Day Average**
+- **14-Day Average**
+- **30-Day Average**
+
+The 7, 14, and 30-day options use rolling periods.
+
+For example, select **Prior Day** if you want to monitor yesterday's performance for unusual changes. Select **7-Day Average** if you want to monitor average performance across the most recent seven-day period.
+
+---
+
+## Step 4: Choose Your Comparison Method
+
+The **Compare To Method** determines what SuperOrbital will use as the baseline when evaluating whether your Observation Period contains an anomaly.
+
+You can compare performance against:
+
+- A **Prior Period**
+- A **Forecast/Goal Metric**
+
+### Option 1: Compare Against a Prior Period
+
+Select **Prior Period** when you want to compare actual performance against historical actual performance.
+
+This is useful for detecting sudden changes or trends in metrics such as Spend, Revenue, CPA, or MER.
+
+#### Select Your Prior Period
+
+Next, define the historical period you want your Observation Period compared against.
+
+For most use cases, select **Same as Observation Period**. This creates an equal-length comparison between your current Observation Period and the corresponding prior period.
+
+For example:
+
+- **Prior Day \+ Day Offset** compares yesterday against the previous day.
+- **7-Day Average \+ Week Offset** compares the most recent 7-day period against the preceding 7-day period.
+- **Prior Day \+ Week Offset** compares yesterday against the same day one week earlier.
+
+#### Select Your Prior Period Offset
+
+Choose the amount of time SuperOrbital should look back for your comparison:
+
+- Day
+- Week
+- Month
+- Year
+
+For example, use a **Day** offset to monitor day-over-day changes or a **Week** offset to compare against the equivalent period from the previous week.
+
+#### Confirm Your Date Windows
+
+Before continuing, review the **Prior Period Date Preview**.
+
+The preview shows the exact dates included in both your Observation Period and comparison period. Use this to confirm that SuperOrbital will be comparing the periods you intended before moving forward.
+
+Once confirmed, continue to **Step 5: Set Your Deviation Threshold**.
+
+### Option 2: Compare Against a Forecast/Goal Metric
+
+Select **Forecast/Goal Metric** when you want to compare actual performance against a predefined target rather than historical performance.
+
+A dropdown will appear containing the available Goal Metrics associated with your selected data source. This can include Custom Goal Metrics created using metrics from that source.
+
+Select the **Forecast/Goal Metric** you want to use as your comparison.
+
+SuperOrbital will compare the actual metric selected earlier in your Outlier Definition against this Goal Metric when determining whether an Outlier should be triggered.
+
+Common use cases include:
+
+- **Budget Monitoring** – Detect when actual Ad Spend is pacing significantly above or below an approved budget.
+- **Revenue Target Monitoring** – Detect when actual Revenue is significantly above or below the client's target.
+
+> **Before You Begin:** Your Goal Metric must already exist in SuperOrbital before you can select it here. If you haven't created one yet, start with **How to Create a Goal Metric**.
+
+When using a Forecast/Goal Metric, you do not need to configure a Prior Period or Prior Period Offset. Continue directly to **Deviation Threshold**.
+
+---
+
+## Step 5: Set Your Deviation Threshold
+
+The **Deviation Threshold** determines how far performance must move from your comparison value before SuperOrbital detects an Outlier.
+
+For example, if you want to detect when Revenue differs from its comparison by **20% or more**, enter **20%** as your Deviation Threshold.
+
+Thresholds can be configured using either:
+
+- **Percentage**
+- **Absolute Value**
+
+For most performance monitoring use cases, **Percentage** will be the most appropriate option.
+
+The Deviation Threshold you enter also becomes the **Medium severity threshold** in the next section.
+
+---
+
+## Step 6: Configure Task & Slack Alert Thresholds
+
+The **Task & Slack Alert Thresholds** determine how SuperOrbital responds as the severity of an anomaly increases.
+
+Available severity levels include:
+
+- **Low**
+- **Medium**
+- **High**
+- **Urgent**
+
+The **Medium** threshold is automatically set to the Deviation Threshold you configured above. Medium is always active and cannot be modified because it represents the baseline at which SuperOrbital considers the change an Outlier and creates a Task.
+
+You can configure additional **Low, High, and Urgent** thresholds based on how you want to classify increasingly significant changes.
+
+> **Important:** Severity thresholds must increase in order: **Low \< Medium \< High \< Urgent**.
+
+### Configure Each Severity Level
+
+For each applicable severity:
+
+1. Enter the threshold for **Low, High, and Urgent**. Medium is populated automatically.
+2. Set each optional severity level to **Active** or **Inactive**.
+3. Under **Notify via Slack**, select **Yes** for any severity that should generate a Slack notification.
+4. Select the corresponding **Slack Severity**:
+   - Info
+   - Warning
+   - Critical
+5. Under **Targets**, click the **gear icon** to choose where the notification should be sent.
+
+Slack notifications can be sent to a **Slack channel** or to **individual users**.
+
+> **Note:** The SuperOrbital Slack App must be added to a Slack channel before that channel will be available as a notification target.
+
+You don't need to activate every severity level. For example, you may choose to create Tasks beginning at Medium but only send Slack notifications when an anomaly reaches High or Urgent severity.
+
+---
+
+## Step 7: Preview Your Outlier
+
+Before activating your Outlier, click **Preview Outlier Definition**.
+
+The **Outlier Preview Tool** tests your configuration against real data without recording an Outlier event, creating a Task, or sending any notifications.
+
+The preview displays the actual metric values for your **Observation Period** and **Comparison Period** and shows whether your current configuration would have triggered an Outlier.
+
+Use the preview to validate your settings and determine whether your Deviation and Severity thresholds are appropriate. If the results are too sensitive or not sensitive enough, adjust your thresholds and preview the Outlier again.
+
+---
+
+## Step 8: Activate Your Outlier
+
+Once you're satisfied with your configuration and preview:
+
+1. Set the Outlier to **Active**.
+2. Click **Save**.
+
+SuperOrbital will now begin monitoring the metric using the Observation Period, Comparison Method, thresholds, and notification settings you've configured.
