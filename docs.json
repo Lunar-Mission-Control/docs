@@ -52,7 +52,8 @@
                   "How-to-Create-a-Multi-Channel-Tracker",
                   "How-to-Build-an-Actual-vs-Goal-Report",
                   "How-to-Integrate-Custom-Google-Sheets"
-                ]
+                ],
+                "expanded": true
               },
               {
                 "group": "Custom Metrics",
@@ -61,7 +62,8 @@
                   "how-to-create-filtered-metrics",
                   "How-to-Create-a-Calculated-Metric",
                   "How-to-Create-a-Calculated-Metric-Using-Filtered-Metrics"
-                ]
+                ],
+                "expanded": true
               },
               {
                 "group": "Manage Goals",
@@ -69,7 +71,8 @@
                   "Manage-Goals-Overview",
                   "How-to-Create-a-Goal-Metric",
                   "How-to-Update-Manage-Goal-Metrics"
-                ]
+                ],
+                "expanded": true
               }
             ],
             "expanded": true
