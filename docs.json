@@ -82,7 +82,8 @@
             "group": "Outlier Management",
             "pages": [
               "Outliers-Overview",
-              "How-to-Create-an-Outlier"
+              "How-to-Create-an-Outlier",
+              "What-Happens-When-an-Outlier-Is-Detected"
             ],
             "expanded": true
           },

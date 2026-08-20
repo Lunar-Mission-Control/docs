@@ -1,0 +1,78 @@
+---
+title: "What Happens When an Outlier Is Detected?"
+---
+
+## Overview
+
+Once an active Outlier detects performance outside of your configured thresholds, SuperOrbital can notify your team in Slack and will automatically create a Task for review.
+
+From there, you can quickly understand what triggered the Outlier, use **Houston** to help investigate the performance change, and determine whether any follow-up action is required.
+
+---
+
+## Review Your Slack Notification
+
+If Slack notifications are enabled for the detected severity level, SuperOrbital will send an alert to the Slack targets configured in your Outlier Definition.
+
+The notification provides a quick snapshot of the detected Outlier, including:
+
+- **Severity Level**
+- **Current Metric Value**
+- **Baseline Value**
+
+The **Current** value represents the metric performance during the **Observation Period** configured in your Outlier.
+
+The **Baseline** represents the value SuperOrbital is comparing that performance against. Depending on your Outlier configuration, this will either be:
+
+- Actual performance from your configured **Prior Period**, or
+- The corresponding **Forecast/Goal Metric** value.
+
+This allows you to quickly understand the size and severity of the performance change directly from Slack.
+
+---
+
+## Ask Houston About the Outlier
+
+From the Slack notification, you can select **Ask Houston** to investigate the Outlier without leaving Slack.
+
+Houston can provide a quick written analysis of what happened, surface potential drivers behind the performance change, and recommend possible next steps.
+
+Use this as a starting point for investigating the Outlier before determining whether additional action is required.
+
+You can also select **View in SuperOrbital** from the Slack notification to open the corresponding Task directly.
+
+---
+
+## Review the Outlier Task in SuperOrbital
+
+Every detected Outlier automatically creates a Task in SuperOrbital.
+
+You can access the Task directly from the Slack notification by clicking **View in SuperOrbital**, or find all detected Outliers from within SuperOrbital:
+
+1. Navigate to **Agency Dashboard**.
+2. Select **PMT Queue**, located below Mission Control.
+3. Open the **Dispatch** tab.
+
+The Dispatch tab displays the Outliers that have been detected and are waiting for review.
+
+Click the **Task Title** to open the Outlier and review or edit its Task fields.
+
+---
+
+## Decide Whether Action Is Required
+
+After reviewing the Outlier, determine whether it requires follow-up.
+
+If the performance change does **not** require action, you can **Reject** the Task.
+
+If follow-up is required, select **Approve & Add to PMT** to move the Task into your team's workflow.
+
+Depending on the Outlier, follow-up actions could include:
+
+- Informing the client about a significant performance change.
+- Investigating unexpected increases or decreases in Spend or Revenue.
+- Adjusting campaign budgets.
+- Updating client targets or forecasts.
+- Investigating the underlying cause of a performance anomaly.
+
+This workflow ensures that detected Outliers aren't just notifications, but can be reviewed and converted into actionable work when necessary.
