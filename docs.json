@@ -29,13 +29,15 @@
               "Executive-Summary-Dashboard",
               "How-to-Configure-Custom-Scorecards",
               "Channel-Performance-Dashboards"
-            ]
+            ],
+            "expanded": true
           },
           {
             "group": "Creative Reporting",
             "pages": [
               "Creative-Reporting-Overview"
-            ]
+            ],
+            "expanded": true
           },
           {
             "group": "Performance Reports",
@@ -66,19 +68,22 @@
                   "How-to-Update-Manage-Goal-Metrics"
                 ]
               }
-            ]
+            ],
+            "expanded": true
           },
           {
             "group": "Marketing Attribution (MTA)",
             "pages": [
               "Marketing-Attribution-Overview"
-            ]
+            ],
+            "expanded": true
           },
           {
             "group": "Outlier Management",
             "pages": [
               "Outliers-Overview"
-            ]
+            ],
+            "expanded": true
           }
         ],
         "icon": "award-simple"
