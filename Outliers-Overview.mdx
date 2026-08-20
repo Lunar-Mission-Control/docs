@@ -1,3 +1,54 @@
 ---
 title: "Outliers Overview"
 ---
+
+## Overview
+
+**Outlier Management** is SuperOrbital's anomaly detection and notification system. It allows you to automatically monitor important client KPIs and identify significant changes in performance without manually checking reports every day.
+
+Outliers can monitor standard platform metrics as well as **Custom Filtered and Calculated Metrics**, making it possible to create alerts around the KPIs that matter most to each client.
+
+When an Outlier is detected, SuperOrbital creates a Task for review and can optionally send your team a Slack notification.
+
+---
+
+## How Outliers Work
+
+Each Outlier defines a metric to monitor, the period of performance to analyze, and what that performance should be compared against.
+
+You can compare performance against:
+
+- **Prior Performance** – Identify unusual changes by comparing current performance against a previous day, week, month, or other historical period.
+- **Forecasts or Goals** – Identify when actual performance is significantly above or below a predefined client target.
+
+For example, Outliers can help your team identify:
+
+- Unexpected increases or decreases in Ad Spend
+- Significant Revenue changes
+- Budget over- or under-pacing
+- Revenue target misses
+- Unexpected changes in CPA, MER, ROAS, or other KPIs
+
+You can also configure different severity thresholds to distinguish between smaller warnings and more significant performance anomalies.
+
+---
+
+## Outlier Notifications & Tasks
+
+When performance exceeds your configured threshold, SuperOrbital automatically creates an **Outlier Task** for your team to review.
+
+You can also configure **Slack notifications** based on severity, allowing the appropriate users or channels to receive alerts when important performance changes occur.
+
+Slack notifications provide a snapshot of the anomaly, including the **Severity, Current Metric Value, and Baseline Value**.
+
+From the notification, you can open the Outlier directly in SuperOrbital or **Ask Houston** for a quick analysis of what happened and recommendations for next steps.
+
+---
+
+## From Detection to Action
+
+Detected Outliers are sent to the **PMT Queue** for review.
+
+From there, your team can determine whether the anomaly requires action. Outliers that don't require follow-up can be rejected, while actionable Outliers can be approved and added to PMT.
+
+This creates a workflow from **automated detection → notification → investigation → action**, helping teams identify important performance changes quickly and turn them into actionable next steps.
