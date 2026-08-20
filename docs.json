@@ -79,18 +79,18 @@
             "expanded": true
           },
           {
-            "group": "Marketing Attribution (MTA)",
-            "pages": [
-              "Marketing-Attribution-Overview"
-            ],
-            "expanded": true
-          },
-          {
             "group": "Outlier Management",
             "pages": [
               "Outliers-Overview"
             ],
             "expanded": true
+          },
+          {
+            "group": "Marketing Attribution (MTA)",
+            "expanded": true,
+            "pages": [
+              "Marketing-Attribution-Overview"
+            ]
           }
         ],
         "icon": "award-simple"
