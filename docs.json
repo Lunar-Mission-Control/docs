@@ -100,7 +100,15 @@
         "icon": "award-simple"
       },
       {
-        "tab": "Agency Dashboard Guides"
+        "tab": "Agency Dashboard Guides",
+        "groups": [
+          {
+            "group": "Ad Spend Tracker",
+            "pages": [
+              "How-to-Review-and-Approve-Ad-Spend"
+            ]
+          }
+        ]
       },
       {
         "tab": "Technical Guides",
